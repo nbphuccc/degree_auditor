@@ -2,13 +2,13 @@
   "name": "backend",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "dist/backend/server.js",
   "scripts": {
-  "test": "echo \"Error: no test specified\" && exit 1",
-  "dev": "nodemon -r tsconfig-paths/register server.ts",
-  "build": "tsc",
-  "start": "node dist/server.js"
-},
+    "dev": "nodemon -r tsconfig-paths/register server.ts",
+    "build": "tsc",
+    "start": "node dist/backend/server.js"
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
