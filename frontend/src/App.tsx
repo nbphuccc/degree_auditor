@@ -389,7 +389,7 @@ export default function App() {
           groupIds: remainingGroups.map((gr) => gr.group_id),
         };
 
-        const response = await fetch("${BASE_URL}/api/requirements-availability", {
+        const response = await fetch(`${BASE_URL}/api/requirements-availability`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -560,7 +560,7 @@ export default function App() {
                           onClick={async () => {
                             try {
                               const res = await fetch(
-                                "${BASE_URL}/api/group-term-courses",
+                                `${BASE_URL}/api/group-term-courses`,
                                 {
                                   method: "POST",
                                   headers: { "Content-Type": "application/json" },
