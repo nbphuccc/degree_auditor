@@ -25,7 +25,23 @@ export default function App() {
   const [clickedGroupCourses, setClickedGroupCourses] = useState<{ course_id: string; code: string }[]>([]);
   const [clickedGroupLabel, setClickedGroupLabel] = useState<string>(""); // optional, show "Group XYZ — Fall"
 
+    const [warmingUp, setWarmingUp] = useState(true);
+
   const BASE_URL = import.meta.env.VITE_BACKEND_URL;
+
+  useEffect(() => {
+    const wakeBackend = async () => {
+      try {
+        await fetch(`${BASE_URL}/api/hello`, { method: "GET" });
+      } catch (err) {
+        console.warn("Backend wake-up ping failed:", err);
+      } finally {
+        setWarmingUp(false);
+      }
+    };
+
+    wakeBackend();
+  }, []);
 
   // Fetch colleges
   useEffect(() => {
@@ -115,10 +131,14 @@ export default function App() {
 };
 
   return (
+    
     <div className="page-container">
     <div className="page">
     <div className="column">
       <div className="box">
+      <div>
+      {warmingUp && <p>⏳ Waking up backend… this may take a few seconds</p>}
+      </div>
       <h2>PATHWAY SELECTOR</h2>
       {/* College Dropdown */}
       <div className="dropdown">

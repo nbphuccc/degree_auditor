@@ -23,6 +23,10 @@ async function openDb() {
 // Routes
 // -----------------------
 
+app.get("/api/hello", (req, res) => {
+  res.json({ message: "Hello from backend" });
+});
+
 // Get all colleges
 app.get("/api/colleges", async (req, res) => {
   const db = await openDb();
