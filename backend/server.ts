@@ -6,7 +6,8 @@ import path from "path";
 import type { College, Degree, GroupRequirement, StandaloneRequirement } from "@shared/types";
 
 const app = express();
-app.use(cors());
+app.use(cors({
+origin: "https://degree-auditor-frontend.onrender.com"}));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "../../frontend/dist")));
 
@@ -469,7 +470,8 @@ app.get(/^\/.*$/, (req, res) => {
 // -----------------------
 // Start server
 // -----------------------
-const PORT = 4000;
+const PORT = process.env.PORT || 4000; // Use the environment variable if available
 app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
+

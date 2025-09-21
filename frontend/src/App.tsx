@@ -25,12 +25,11 @@ export default function App() {
   const [clickedGroupCourses, setClickedGroupCourses] = useState<{ course_id: string; code: string }[]>([]);
   const [clickedGroupLabel, setClickedGroupLabel] = useState<string>(""); // optional, show "Group XYZ — Fall"
 
-
-  
+  const BASE_URL = "https://degree-auditor.onrender.com";
 
   // Fetch colleges
   useEffect(() => {
-    fetch("http://localhost:4000/api/colleges")
+    fetch("${BASE_URL}/api/colleges")
       .then((res) => res.json())
       .then(setColleges)
       .catch((err) => console.error(err));
@@ -47,7 +46,7 @@ export default function App() {
       return;
     }
 
-    fetch(`http://localhost:4000/api/pathways/distinct?collegeId=${selectedCollege}`)
+    fetch(`${BASE_URL}/api/pathways/distinct?collegeId=${selectedCollege}`)
       .then((res) => res.json())
       .then(setPathways)
       .catch((err) => console.error(err));
@@ -69,7 +68,7 @@ export default function App() {
     }
 
     fetch(
-      `http://localhost:4000/api/degrees/by-pathway?pathwayName=${encodeURIComponent(
+      `${BASE_URL}/api/degrees/by-pathway?pathwayName=${encodeURIComponent(
         selectedPathway
       )}`
     )
@@ -92,7 +91,7 @@ export default function App() {
   try {
     // 1. Get pathway_id
     const res = await fetch(
-      `http://localhost:4000/api/pathway-id?collegeId=${selectedCollege}&pathwayName=${encodeURIComponent(
+      `${BASE_URL}/api/pathway-id?collegeId=${selectedCollege}&pathwayName=${encodeURIComponent(
         selectedPathway
       )}&degreeId=${selectedDegree}`
     );
@@ -101,7 +100,7 @@ export default function App() {
 
     // 2. Get requirements
     const reqRes = await fetch(
-      `http://localhost:4000/api/pathway-requirements?pathwayId=${pathwayId}`
+      `${BASE_URL}/api/pathway-requirements?pathwayId=${pathwayId}`
     );
     const reqData: {
       standaloneRequirements: StandaloneRequirement[];
@@ -306,7 +305,7 @@ export default function App() {
 
                     try {
                       const res = await fetch(
-                        `http://localhost:4000/api/groups/${group.group_id}/validate-v2?courseCode=${encodeURIComponent(courseCode)}`
+                        `${BASE_URL}/api/groups/${group.group_id}/validate-v2?courseCode=${encodeURIComponent(courseCode)}`
                       );
 
                       const { valid, course } = (await res.json()) as {
@@ -390,7 +389,7 @@ export default function App() {
           groupIds: remainingGroups.map((gr) => gr.group_id),
         };
 
-        const response = await fetch("http://localhost:4000/api/requirements-availability", {
+        const response = await fetch("${BASE_URL}/api/requirements-availability", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -561,7 +560,7 @@ export default function App() {
                           onClick={async () => {
                             try {
                               const res = await fetch(
-                                "http://localhost:4000/api/group-term-courses",
+                                "${BASE_URL}/api/group-term-courses",
                                 {
                                   method: "POST",
                                   headers: { "Content-Type": "application/json" },
