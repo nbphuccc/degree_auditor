@@ -1,0 +1,226 @@
+/* ========================
+   Reset & Base Styles
+======================== */
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  display: block;       /* remove any centering flex */
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /*background: #4b4b4b;*/
+}
+
+.page-container {
+  display: flex;
+  gap: 30px;              /* space between the two pages */
+  align-items: flex-start; /* align content at the top */
+}
+
+/* ========================
+   Page Container
+======================== */
+.page {
+  display: block;       /* vertical stacking */
+  padding: 20px;        /* spacing from page edges */
+  box-sizing: border-box;
+}
+
+/* ========================
+   Column Wrapper
+   (optional for stacking multiple boxes)
+======================== */
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;            /* space between boxes */
+  align-items: flex-start; /* ensure left alignment */
+}
+
+/* ========================
+   Box Styles
+======================== */
+.box {
+  color: black;
+  background: #81c6ff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 20px;
+  width: 650px;               /* adjust as needed */
+  box-shadow: 0 2px 6px rgba(121, 224, 255, 0.1);
+  margin: 0;                  /* important: prevent horizontal centering */
+  box-sizing: border-box;
+  display: flex;              /* make box a flex container */
+  flex-direction: column;     /* stack content vertically */
+  align-items: center;
+  padding-top: 0px;
+}
+
+/* ========================
+   Dropdown spacing
+======================== */
+.dropdown {
+  margin: 5px 0;
+}
+
+.dropdown:disabled {
+  cursor: not-allowed;
+}
+
+/* ========================
+   Button
+======================== */
+.button {
+  padding: 10px 16px;
+  font-size: 50px;
+  cursor: pointer;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  margin-top: 15px;
+  margin-bottom: 15px;
+}
+
+.button-lock {
+  color: rgb(255, 61, 61);
+  background-color: #e7d31b;
+}
+
+.button-unlock {
+  background-color: #20ad32;
+}
+
+
+.button:disabled {
+  color: #dddddd;
+  background-color: #aaa;
+  cursor: not-allowed;
+}
+
+/* ========================
+   Requirements List
+======================== */
+/* Requirements list container */
+.requirements-list {
+  list-style: none;          /* remove bullets */
+  padding-left: 0;           /* no left padding */
+  margin-top: 10px;
+  width: 100%;               /* span the full width of parent box */
+}
+
+/* Each requirement item styled as a box */
+.requirements-list li {
+  background-color: #f1f1f1; /* light gray background */
+  padding: 8px 12px;         /* internal spacing */
+  margin-bottom: 5px;        /* space between items */
+  border-radius: 4px;        /* slightly rounded corners */
+  text-align: left;          /* left align the text */
+  width: 100%;               /* take full width of parent container */
+  box-sizing: border-box;    /* include padding in width */
+}
+
+.box h2 {
+  color: #000000;           /* optional: header color */
+  margin-bottom: 12px;       /* space between header and content */
+  padding-bottom: 4px;       /* space between text and line */
+  border-bottom: 2px solid #000000; /* horizontal line */
+}
+
+
+/* Optional: spacing between group and standalone requirements */
+.requirements-list + .requirements-list {
+  margin-top: 0px;
+}
+
+  /* Checkbox styling */
+.checkbox {
+  margin-right: 10px;
+  transform: scale(1.2); 
+}
+
+.checkbox:disabled {
+  cursor: not-allowed;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 5px 0;
+}
+
+/* Textbox styling */
+.textbox {
+  width: 100%;
+  padding: 8px 10px;
+  margin-top: 6px;
+  border: 1px solid #1d1d1d;
+  border-radius: 4px;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+.textbox:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 4px rgba(0, 123, 255, 0.4);
+}
+
+.textbox:disabled {
+  cursor: not-allowed;
+}
+
+/* Error text */
+.error-text {
+  margin-top: 4px;
+  font-size: 13px;
+  color: red;
+}
+
+.requirement-item {
+  display: flex;
+  justify-content: space-between; /* left text, right badges */
+  align-items: center;
+  padding: 4px 0;
+}
+
+.requirement-text {
+  flex-shrink: 0; /* text stays on the left */
+}
+
+.term-container {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end; /* badges stick to the right edge */
+  flex-shrink: 0;
+}
+
+/* Term badges */
+.term-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: 0.85em;
+  font-weight: 600;
+  color: white;
+}
+
+.term-badge.fall {
+  background-color: #e67e22; /* orange */
+}
+
+.term-badge.winter {
+  background-color: #3498db; /* blue */
+}
+
+.term-badge.spring {
+  background-color: #2ecc71; /* green */
+}
+
+.term-badge.summer {
+  background-color: #ffcc02; /* yellow */
+}
+
+
+
