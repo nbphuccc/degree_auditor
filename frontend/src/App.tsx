@@ -25,7 +25,7 @@ export default function App() {
   const [clickedGroupCourses, setClickedGroupCourses] = useState<{ course_id: string; code: string }[]>([]);
   const [clickedGroupLabel, setClickedGroupLabel] = useState<string>(""); // optional, show "Group XYZ — Fall"
 
-  const BASE_URL = "https://degree-auditor.onrender.com";
+  const BASE_URL = import.meta.env.VITE_BACKEND_URL;
 
   // Fetch colleges
   useEffect(() => {
