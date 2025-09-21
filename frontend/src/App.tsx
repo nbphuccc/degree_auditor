@@ -29,7 +29,7 @@ export default function App() {
 
   // Fetch colleges
   useEffect(() => {
-    fetch("${BASE_URL}/api/colleges")
+    fetch(`${BASE_URL}/api/colleges`)
       .then((res) => res.json())
       .then(setColleges)
       .catch((err) => console.error(err));
