@@ -552,8 +552,7 @@ const groups = await db.all<{
 
 
 const groupMembersRows: { group_id: number; prereq_id: string }[] = await db.all(`
-  SELECT group_id, prereq_id FROM PrerequisiteGroupMembers
-`);
+  SELECT group_id, prereq_id FROM PrerequisiteGroupCourse `);
 
     // Map group_id -> { course_id, min_courses, members: [] }
     const groupsById = new Map<number, GroupWithMembers>();
