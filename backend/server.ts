@@ -596,7 +596,7 @@ const groupMembersRows: { group_id: number; prereq_id: string }[] = await db.all
 
     // 5) Verification rules:
     // For each group G (with dependent = course_id)
-    //   - If dependent not scheduled, we skip verification for that dependent (could be advisory? user didn't ask)
+    //   - If dependent not scheduled, skip verification for that dependent
     //   - Otherwise check how many of group's members are scheduled at termIndex < dependent's termIndex
     //     - if count < min_courses:
     //         - for each missing prereq p in group.members:
@@ -627,10 +627,7 @@ const groupMembersRows: { group_id: number; prereq_id: string }[] = await db.all
       const dependent = g.course_id;
       if (!dependent) continue; // skip malformed
 
-      // If dependent not scheduled, we still want to emit advisories for missing prereqs? The user asked:
-      // "note that if there is a prereq that does not exist in the planner or in RemainingStandaloneRequirement, that is an advisory.
-      // if there is a prereq that is not in the planner, but does exist in RemainingStandaloneRequirement, that is a violation"
-      // We'll produce advisories/violations for prereqs relative to group members even if dependent not scheduled.
+      // Produce advisories/violations for prereqs relative to group members even if dependent not scheduled.
       // However, main "violation" about ordering applies only when dependent is scheduled.
 
       // Count how many group members are scheduled before dependent
