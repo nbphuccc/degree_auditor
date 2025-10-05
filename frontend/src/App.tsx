@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import type { College, PathwayName, Degree, GroupRequirement, StandaloneRequirement, TakenCourse, RemainingGroupRequirement, RemainingStandaloneRequirement} from "@shared/types";
+import { useEffect, useState, useMemo } from "react";
+import type { College, PathwayName, Degree, GroupRequirement, StandaloneRequirement, TakenCourse,
+   RemainingGroupRequirement, RemainingStandaloneRequirement, Quarter, VerifyPlannerResponse} from "@shared/types";
 import "./App.css";
 
 export default function App() {
@@ -25,9 +26,160 @@ export default function App() {
   const [clickedGroupCourses, setClickedGroupCourses] = useState<{ course_id: string; code: string }[]>([]);
   const [clickedGroupLabel, setClickedGroupLabel] = useState<string>(""); // optional, show "Group XYZ — Fall"
 
-    const [warmingUp, setWarmingUp] = useState(true);
+  const [selectedQuarter, setSelectedQuarter] = useState<string | null>(null); // initially null
+  const [plannerYear, setPlannerYear] = useState<string | null>(null);
+  const [summerSkip, setSummerSkip] = useState<boolean>(false);
+  const [plannerQuarters, setPlannerQuarters] = useState<Quarter[]>([]);
+  const [usedStandalone, setUsedStandalone] = useState<Set<string>>(new Set()); // set of course_ids
+  const [usedGroup, setUsedGroup] = useState<Set<string>>(new Set()); // set of group_id - instance
+  const [plannerGroupErrors, setPlannerGroupErrors] = useState<Map<string, string>>(new Map());
+
+  const [verifyResult, setVerifyResult] = useState<VerifyPlannerResponse | null>(null);
+  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [verifyError, setVerifyError] = useState<string | null>(null);
+
+
+
+
+  const [warmingUp, setWarmingUp] = useState(true);
+
+  // Order of quarters
+  const quarterOrder = ["Fall", "Winter", "Spring", "Summer"] as const;
 
   const BASE_URL = import.meta.env.VITE_BACKEND_URL;
+
+  /**
+ * Returns true if any planner slot is a group (groupKey present) but has no chosenCourse.
+ */
+const canVerify = useMemo(() => {
+  for (const q of plannerQuarters) {
+    for (const slot of q.slots) {
+      if (slot.groupKey && (!slot.chosenCourse || !slot.chosenCourse.course_id)) {
+        return false; // there's at least one group without chosenCourse
+      }
+    }
+  }
+  return plannerQuarters.length > 0; // optional: require at least one quarter
+}, [plannerQuarters]);
+
+function buildScheduleFromPlannerQuarters() {
+  // Map quarter name to cycle index so we can compute chronological order if necessary.
+  // But simplest: assign increasing termIndex by iterating plannerQuarters in array order.
+  const schedule: { course_id: string; termIndex: number }[] = [];
+
+  // assign termIndex by quarter position (all slots in same quarter share same termIndex)
+  for (let qIndex = 0; qIndex < plannerQuarters.length; qIndex++) {
+    const quarter = plannerQuarters[qIndex];
+    const termIndex = qIndex; // 0-based index by quarter order (preserves chronological order)
+    for (const slot of quarter.slots) {
+      if (!slot.course) continue;
+
+      if ("course_id" in slot.course) {
+        // standalone course
+        schedule.push({ course_id: slot.course.course_id, termIndex });
+      } else {
+        // group; use chosenCourse (frontend ensures chosenCourse exists before enabling Verify)
+        if (slot.chosenCourse && slot.chosenCourse.course_id) {
+          schedule.push({ course_id: slot.chosenCourse.course_id, termIndex });
+        } else {
+          // This should not happen due to canVerify guarding button; but skip defensively.
+          // We do not include group slots with no chosenCourse.
+        }
+      }
+    }
+  }
+
+  return schedule;
+}
+
+function getRemainingStandaloneCourseIds() {
+  return remainingStandaloneAvailabilities.map((r) => r.course_id);
+}
+
+async function handleVerifyPlanner() {
+  // guard
+  if (!canVerify) return;
+
+  setVerifyLoading(true);
+  setVerifyResult(null);
+  setVerifyError(null);
+
+  try {
+    const schedule = buildScheduleFromPlannerQuarters();
+    const remainingStandaloneCourseIds = getRemainingStandaloneCourseIds();
+
+    const payload = {
+      schedule, // [{course_id, termIndex}, ...]
+      remainingStandaloneCourseIds, // for backend to determine advisory vs violation per your rule
+    };
+
+    console.log("HANDLER")
+    // Replace endpoint with server route you will implement.
+    const res = await fetch(`${BASE_URL}/api/verify-planner`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => null);
+      throw new Error(`Server returned ${res.status}${text ? `: ${text}` : ""}`);
+    }
+
+    const json: VerifyPlannerResponse = await res.json();
+    setVerifyResult(json);
+
+  } catch (err: any) {
+    console.error("Verify Planner failed", err);
+    setVerifyError(err?.message ?? String(err));
+  } finally {
+    setVerifyLoading(false);
+  }
+}
+
+  
+  // --- Generate quarters dynamically ---
+  useEffect(() => {
+  if (!selectedQuarter || !plannerYear) return;
+
+  const totalCourses = remainingStandaloneAvailabilities.length + remainingGroupAvailabilities.length;
+  const numQuarters = Math.ceil(totalCourses / 3);
+
+  const quarters: Quarter[] = [];
+  let currentYear = Number(plannerYear);
+  let qIndex = quarterOrder.indexOf(selectedQuarter as any);
+  let quartersAdded = 0;
+
+  while (quartersAdded < numQuarters) {
+    let qName = quarterOrder[qIndex % 4];
+
+    if (qName === "Summer" && summerSkip) {
+      // add a clickable Summer placeholder, but do NOT count it toward the necessary quarters
+      quarters.push({
+        name: "Summer",
+        year: currentYear.toString(),
+        slots: [],
+        isPlaceholder: true,
+      });
+      qIndex++;
+      // don't increment quartersAdded here
+      continue;
+    }
+
+    quarters.push({
+      name: qName,
+      year: currentYear.toString(),
+      slots: [{}, {}, {}], // 3 slots per quarter
+    });
+
+    if (qName === "Winter") currentYear++; // increment year after Winter
+    qIndex++;
+    quartersAdded++;
+  }
+
+  setPlannerQuarters(quarters);
+}, [selectedQuarter, plannerYear, summerSkip, remainingStandaloneAvailabilities, remainingGroupAvailabilities]);
+
 
   useEffect(() => {
     const wakeBackend = async () => {
@@ -130,268 +282,123 @@ export default function App() {
   }
 };
 
-  return (
-    
-    <div className="page-container">
-    <div className="page">
-    <div className="column">
-      <div className="box">
-      <div>
-      {warmingUp && <p>⏳ Waking up backend… this may take a few seconds</p>}
-      </div>
-      <h2>PATHWAY SELECTOR</h2>
-      {/* College Dropdown */}
-      <div className="dropdown">
-        <label>
-          College: 
-          <select
-            value={selectedCollege ?? ""}
-            onChange={(e) =>{
-              setGroupErrors(new Map());
-              setTakenGroupRequirements(new Map());
-              setTakenStandaloneRequirements([]);
-              setAllTakenCourses([]);
-              setSelectedCollege(e.target.value ? Number(e.target.value) : null)
-            }}
-            disabled={locked}
-          >
-            <option value="">-- Select a College --</option>
-            {colleges.map((c) => (
-              <option key={c.college_id} value={c.college_id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+  const handleCollegeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setGroupErrors(new Map());
+    setTakenGroupRequirements(new Map());
+    setTakenStandaloneRequirements([]);
+    setAllTakenCourses([]);
+    setSelectedCollege(e.target.value ? Number(e.target.value) : null);
+  };
 
-      {/* Pathway Dropdown */}
-      <div className="dropdown">
-        <label>
-          Pathway: 
-          <select
-            value={selectedPathway ?? ""}
-            onChange={(e) => {
-              setGroupErrors(new Map());
-              setTakenGroupRequirements(new Map());
-              setTakenStandaloneRequirements([]);
-              setAllTakenCourses([]);
-              const name = e.target.value || null;
-              setSelectedPathway(name);              
-            }}
-            disabled={!selectedCollege || locked}
-          >
-            <option value="">-- Select a Pathway --</option>
-            {pathways.map((p, idx) => (
-              <option key={idx} value={p.name}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+  const handlePathwayChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setGroupErrors(new Map());
+    setTakenGroupRequirements(new Map());
+    setTakenStandaloneRequirements([]);
+    setAllTakenCourses([]);
+    const name = e.target.value || null;
+    setSelectedPathway(name);
+  };
 
-      {/* Degree Dropdown */}
-      <div className="dropdown">
-        <label>
-          Degree: 
-          <select
-            value={selectedDegree ?? ""}
-            onChange={(e) =>{
-              setGroupErrors(new Map());
-              setTakenGroupRequirements(new Map());
-              setTakenStandaloneRequirements([]);
-              setAllTakenCourses([]);
-              setSelectedDegree(
-                e.target.value ? Number(e.target.value) : null
-              )
-            }}
-            disabled={!selectedPathway || locked}
-          >
-            <option value="">-- Select a Degree --</option>
-            {degrees.map((d) => (
-              <option key={d.degree_id} value={d.degree_id}>
-                {d.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+  const handleDegreeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setGroupErrors(new Map());
+    setTakenGroupRequirements(new Map());
+    setTakenStandaloneRequirements([]);
+    setAllTakenCourses([]);
+    setSelectedDegree(e.target.value ? Number(e.target.value) : null);
+  };
 
-      {/* CONFIRM Button */}
-        <button onClick={handleConfirm} disabled={!selectedDegree || locked}>
-          CONFIRM
-        </button>
-      </div>
+  const handleStandaloneCheck = (req: any, checked: boolean) => {
+    if (checked) {
+      setTakenStandaloneRequirements((prev) => [...prev, req]);
+      setAllTakenCourses((prev) => [...prev, req]);
+    } else {
+      setTakenStandaloneRequirements((prev) =>
+        prev.filter((s) => s.course_id !== req.course_id)
+      );
+      setAllTakenCourses((prev) =>
+        prev.filter((s) => s.course_id !== req.course_id)
+      );
+    }
+  };
 
-      {/* Requirements Display */}
-      {(groupRequirements.length > 0 || standaloneRequirements.length > 0) && (
-        <div className="box">
-          <h2>REQUIRED COURSES</h2>
+  const handleGroupInputChange = (key: string, value: string) => {
+    const v = value.trim();
+    setTakenGroupRequirements((prev) => {
+      const next = new Map(prev);
+      if (!v) {
+        next.delete(key);
+        setAllTakenCourses((prevCourses) =>
+          prevCourses.filter((c) => c.associatedKey !== key)
+        );
+      } else {
+        next.set(key, v);
+      }
+      return next;
+    });
+  };
 
-          {/* Standalone Requirements */}
-          <h3>Check the box of classes you have taken</h3>
-          {standaloneRequirements.length > 0 && (
-            <ul className="requirements-list">
-              {standaloneRequirements.map((req) => (
-                <li key={req.course_id}>
-                  <label>
-                    <input
-                      type="checkbox"
-                      className="checkbox"
-                      checked={takenStandaloneRequirements.some(
-                        (s) => s.course_id === req.course_id
-                      )}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setTakenStandaloneRequirements((prev) => [...prev, req]);
-                          setAllTakenCourses((prev) => [...prev, req]); // add to master array
-                        } else {
-                          setTakenStandaloneRequirements((prev) =>
-                            prev.filter((s) => s.course_id !== req.course_id)
-                          );
-                          setAllTakenCourses((prev) =>
-                            prev.filter((s) => s.course_id !== req.course_id)
-                          );
-                        }
-                      }}
-                      disabled={locked}
-                    />
+  const handleGroupInputBlur = async (key: string, group: any, courseCode: string) => {
+    const code = courseCode.trim();
+    if (!code) {
+      setGroupErrors((prev) => {
+        const next = new Map(prev);
+        next.delete(key);
+        return next;
+      });
+      setAllTakenCourses((prevCourses) =>
+        prevCourses.filter((c) => c.associatedKey !== key)
+      );
+      return;
+    }
 
-                    {req.code}
-                  </label>
-                </li>
-              ))}
-            </ul>
-          )}
+    try {
+      const res = await fetch(
+        `${BASE_URL}/api/groups/${group.group_id}/validate-v2?courseCode=${encodeURIComponent(code)}`
+      );
+      const { valid, course } = await res.json();
 
-          {/* Group Requirements */}
-          <h3>Fill in the box the class you have taken in each groups</h3>
-          {groupRequirements.length > 0 && (
-            <ul className="requirements-list">
-            {groupRequirements.map((group) => {
-              const key = group.group_instance;
+      setGroupErrors((prev) => {
+        const next = new Map(prev);
 
-              return (
-                <li key={key} className="group-item">
-                {/* Group description */}
-                <div className="group-description">{group.description}</div>
+        const isInStandalone = standaloneRequirements.some(
+          (s) => s.code.toUpperCase() === code.toUpperCase()
+        );
 
-                {/* Textbox for user input */}
-                <input
-                  type="text"
-                  className="textbox"
-                  placeholder="Enter course code"
-                  value={takenGroupRequirements.get(key) ?? ""}
-                  onChange={(e) => {
-                    const v = e.target.value.trim();
+        setAllTakenCourses((prevCourses) =>
+          prevCourses.filter((c) => c.associatedKey !== key)
+        );
 
-                    setTakenGroupRequirements((prev) => {
-                      const next = new Map(prev);
+        if (!valid || !course) {
+          next.set(key, `${code} is not valid for this group.`);
+        } else if (isInStandalone) {
+          next.set(key, `${code} is already a standalone requirement.`);
+        } else if (
+          Array.from(takenGroupRequirements.entries()).some(
+            ([k, v]) => v === code && k !== key
+          )
+        ) {
+          next.set(key, `${code} has already been entered in another group.`);
+        } else {
+          next.delete(key);
+          setAllTakenCourses((prevCourses) => [
+            ...prevCourses,
+            { ...course, associatedKey: key },
+          ]);
+        }
 
-                      if (!v) {
-                        // remove key if input is empty
-                        next.delete(key);
+        return next;
+      });
+    } catch {
+      setGroupErrors((prev) => {
+        const next = new Map(prev);
+        next.set(key, "Validation failed (network error).");
+        return next;
+      });
+    }
+  };
 
-                        // remove the corresponding course from allTakenCourses
-                        setAllTakenCourses((prevCourses) =>
-                          prevCourses.filter((c) => c.associatedKey !== key)
-                        );
-                      } else {
-                        next.set(key, v);
-                      }
-
-                      return next;
-                    });
-                  }}
-
-                  onBlur={async (e) => {
-                    const courseCode = e.target.value.trim();
-
-                    // If input is empty, clear error and return
-                    if (!courseCode) {
-                      setGroupErrors((prev) => {
-                        const next = new Map(prev);
-                        next.delete(key);
-                        return next;
-                      });
-
-                      setAllTakenCourses((prevCourses) =>
-                        prevCourses.filter((c) => c.associatedKey !== key)
-                      );
-
-                      return;
-                    }
-
-                    try {
-                      const res = await fetch(
-                        `${BASE_URL}/api/groups/${group.group_id}/validate-v2?courseCode=${encodeURIComponent(courseCode)}`
-                      );
-
-                      const { valid, course } = (await res.json()) as {
-                        valid: boolean;
-                        course?: { course_id: string; code: string };
-                      };
-
-                      setGroupErrors((prev) => {
-                        const next = new Map(prev);
-
-                        const isInStandalone = standaloneRequirements.some(
-                          (s) => s.code.toUpperCase() === courseCode.toUpperCase()
-                        );
-
-                        // Remove previous entry from allTakenCourses if any
-                        setAllTakenCourses((prevCourses) =>
-                          prevCourses.filter((c) => c.associatedKey !== key)
-                        );
-
-                        if (!valid || !course) {
-                          next.set(key, `${courseCode} is not valid for this group.`);
-                        } else if (isInStandalone) {
-                          next.set(key, `${courseCode} is already listed as a standalone requirement.`);
-                        } else if (
-                          Array.from(takenGroupRequirements.entries()).some(
-                            ([k, v]) => v === courseCode && k !== key
-                          )
-                        ) {
-                          next.set(key, `${courseCode} has already been entered in another group.`);
-                        } else {
-                          // valid input → add to allTakenCourses with associatedKey
-                          next.delete(key);
-                          setAllTakenCourses((prevCourses) => [
-                            ...prevCourses,
-                            { ...course, associatedKey: key },
-                          ]);
-                        }
-
-                        return next;
-                      });
-                    } catch (err) {
-                      setGroupErrors((prev) => {
-                        const next = new Map(prev);
-                        next.set(key, "Validation failed (network error).");
-                        return next;
-                      });
-                    }
-                  }}
-                  disabled={locked}
-                />
-
-                {/* Validation error */}
-                {groupErrors.has(key) && (
-                  <div className="error-text">{groupErrors.get(key)}</div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-
-     <button
-  className={`button ${locked ? "button-unlock" : "button-lock"}`}
-  onClick={async () => {
+  const handleLockToggle = async () => {
     if (!locked) {
-      // Compute remaining
       const takenGroupKeys = new Set(takenGroupRequirements.keys());
       const remainingGroups = groupRequirements.filter(
         (gr) => !takenGroupKeys.has(gr.group_instance)
@@ -401,7 +408,6 @@ export default function App() {
           !takenStandaloneRequirements.some((t) => t.course_id === sr.course_id)
       );
 
-      // Call backend for availability
       try {
         const payload = {
           collegeId: selectedCollege,
@@ -417,20 +423,15 @@ export default function App() {
 
         if (!response.ok) throw new Error("Failed to fetch availability");
 
-        // Typecast backend response inline
-        const data = await response.json() as {
+        const data = (await response.json()) as {
           standalone: { course_id: string; availability: string }[];
           groups: { group_id: number; availability: string }[];
         };
 
-        //console.log("Backend response:", data);
-
-        // Merge availability into state
         const updatedStandalone: RemainingStandaloneRequirement[] =
           remainingStandalones.map((sr) => {
             const match = data.standalone.find(
-              (s: { course_id: string; availability: string }) =>
-                s.course_id === sr.course_id
+              (s) => s.course_id === sr.course_id
             );
             return { ...sr, availability: match?.availability ?? "" };
           });
@@ -438,203 +439,726 @@ export default function App() {
         const updatedGroup: RemainingGroupRequirement[] =
           remainingGroups.map((gr) => {
             const match = data.groups.find(
-              (g: { group_id: number; availability: string }) =>
-                g.group_id === gr.group_id
+              (g) => g.group_id === gr.group_id
             );
             return { ...gr, availability: match?.availability ?? "" };
           });
 
         setRemainingStandaloneAvailabilities(updatedStandalone);
         setRemainingGrouAvailabilities(updatedGroup);
-
-        //console.log("Standalone availabilities:", updatedStandalone);
-        //console.log("Group availabilities:", updatedGroup);
       } catch (err) {
         console.error(err);
       }
     } else {
-      // Unlock: clear all
       setRemainingStandaloneAvailabilities([]);
       setRemainingGrouAvailabilities([]);
       setClickedGroupCourses([]);
     }
 
     setLocked((prev) => !prev);
-  }}
-  disabled={groupErrors.size !== 0}
->
-  {locked ? "UNLOCK" : "LOCK-IN"}
-</button>
+  };
+
+  const handleGroupAvailabilityClick = async (gr: any, term: string) => {
+    try {
+      const res = await fetch(`${BASE_URL}/api/group-term-courses`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          groupId: gr.group_id,
+          collegeId: selectedCollege,
+          term,
+        }),
+      });
+      const data = await res.json();
+      setClickedGroupCourses(data);
+      setClickedGroupLabel(`${gr.description} — ${term}`);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // --- Add Summer manually ---
+  const addSummerQuarter = (year: string) => {
+    if (plannerQuarters.some(q => q.name === "Summer" && q.year === year && !q.isPlaceholder)) return;
+
+    const springIndex = plannerQuarters.findIndex(q => q.name === "Spring" && q.year === year);
+    const insertIndex = springIndex >= 0 ? springIndex + 1 : plannerQuarters.length;
+
+    const newQuarter: Quarter = { name: "Summer", year, slots: [{}, {}, {}] };
+
+    // remove placeholder if exists
+    const newPlanner = plannerQuarters.filter(
+      q => !(q.isPlaceholder && q.name === "Summer" && q.year === year)
+    );
+
+    newPlanner.splice(insertIndex, 0, newQuarter);
+    setPlannerQuarters(newPlanner);
+  };
+
+  const addNextQuarter = () => {
+  if (plannerQuarters.length === 0 || !plannerYear) return;
+
+  const lastQuarter = plannerQuarters[plannerQuarters.length - 1];
+  let lastIndex = quarterOrder.indexOf(lastQuarter.name as any);
+  let nextIndex = (lastIndex + 1) % 4; // next quarter in order
+  let nextYear = Number(lastQuarter.year);
+
+  const nextQuarterName = quarterOrder[nextIndex];
+  const newQuarters: Quarter[] = [];
+
+  // Increment year after Winter
+  if (lastQuarter.name === "Winter") {
+    nextYear++;
+  }
+
+  if (nextQuarterName === "Summer" && summerSkip) {
+    // 1️⃣ Add Summer placeholder
+    newQuarters.push({
+      name: "Summer",
+      year: nextYear.toString(),
+      slots: [],
+      isPlaceholder: true,
+    });
+
+    // 2️⃣ Immediately add Fall after Summer placeholder
+    const fallYear = nextYear; // Fall is same year after Summer
+    newQuarters.push({
+      name: "Fall",
+      year: fallYear.toString(),
+      slots: [{}, {}, {}],
+    });
+  } else {
+    // Normal quarter
+    newQuarters.push({
+      name: nextQuarterName as any,
+      year: nextYear.toString(),
+      slots: [{}, {}, {}],
+    });
+  }
+
+  setPlannerQuarters(prev => [...prev, ...newQuarters]);
+};
+
+// --- Helper functions ---
+const getGroupKey = (group: RemainingGroupRequirement) =>
+  `${group.group_id}-${group.group_instance}`;
+
+/*
+const isCourseUsed = (course: RemainingStandaloneRequirement | RemainingGroupRequirement) => {
+  if ("course_id" in course) {
+    return usedStandalone.has(course.course_id);
+  } else {
+    return usedGroup.has(getGroupKey(course));
+  }
+};
+*/
+
+// --- Drag handlers ---
+const handleDragStart = (
+  e: React.DragEvent<HTMLDivElement | HTMLLIElement>,
+  course: RemainingStandaloneRequirement | RemainingGroupRequirement,
+  qIdx?: number,
+  sIdx?: number
+) => {
+  e.dataTransfer.setData(
+    "dragData",
+    JSON.stringify({ course, qIdx, sIdx })
+  );
+};
 
 
-{/*Debugging*/}
-{/*
-{allTakenCourses.length > 0 && (
-  <div className="box">
-    <h2>All Taken Courses (Debug)</h2>
-    <ul className="requirements-list">
-      {allTakenCourses.map((course) => (
-        <li key={course.course_id}>
-          {course.code} (ID: {course.course_id})
-        </li>
-      ))}
-      </ul>
-  </div>
-)}
+const handleDropCourse = (targetQ: number, targetS: number, e: React.DragEvent<HTMLDivElement>) => {
+  const data = e.dataTransfer.getData("dragData");
+  if (!data) return;
+  const { course, qIdx, sIdx } = JSON.parse(data);
 
-{takenStandaloneRequirements.length > 0 && (
-  <div className="box">
-    <h2>Taken Standalone Requirements (Debug)</h2>
-    <ul className="requirements-list">
-      {takenStandaloneRequirements.map((course) => (
-        <li key={course.course_id} className="course-item">
-          {course.code} ({course.course_id})
-        </li>
-      ))}
-    </ul>
-  </div>
-)}
+  setPlannerQuarters(prev => {
+    const newPlanner = [...prev];
 
+    // Case 1: Moving from planner
+    if (qIdx !== undefined && sIdx !== undefined) {
+      newPlanner[qIdx].slots[sIdx] = {}; // clear old slot
+    }
 
-{takenGroupRequirements.size > 0 && (
-  <div className="box">
-    <h2>Taken Group Requirements (Debug)</h2>
-    <ul className="requirements-list">
-      {Array.from(takenGroupRequirements.entries()).map(([key, value]) => (
-        <li key={key}>
-          <strong>{key}</strong>: {value}
-        </li>
-      ))}
-    </ul>
-  </div>
-)}
+    // Case 2: Dropping into target
+    newPlanner[targetQ].slots[targetS] = {
+      course,
+      groupKey: "group_id" in course ? getGroupKey(course) : undefined,
+    };
 
-{groupErrors.size > 0 && (
-  <div className="box">
-    <h3>Group Errors (Debug)</h3>
-    <ul className="requirements-list">
-      {[...groupErrors.entries()].map(([key, error]) => (
-        <li key={key}>
-          <strong>{key}:</strong> {error}
-        </li>
-      ))}
-    </ul>
-  </div>
-)}
-*/}
+    return newPlanner;
+  });
+
+  // If dragged from availabilities, still need to update "used" sets
+  if (qIdx === undefined) {
+    if ("course_id" in course) {
+      setUsedStandalone(prev => new Set(prev).add(course.course_id));
+    } else {
+      setUsedGroup(prev => new Set(prev).add(getGroupKey(course)));
+    }
+  }
+};
 
 
-  </div>
-)}
+const handleRemoveCourse = (qIdx: number, sIdx: number) => {
+  const slot = plannerQuarters[qIdx].slots[sIdx];
+  if (!slot.course) return;
 
-    </div>
-    </div>
+  const course = slot.course;
+  // Remove from used sets
+  if ("course_id" in course) {
+    setUsedStandalone(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(course.course_id);
+      return newSet;
+    });
+  } else {
+    setUsedGroup(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(getGroupKey(course));
+      return newSet;
+    });
+  }
 
-  {locked && (
-  <>
-    {/* Availabilities */}
-    <div className="page">
-      <div className="column">
-        <div className="box">
-          <h2>Remaining Requirements with Availability</h2>
+  // Remove from planner slot
+  setPlannerQuarters(prev => {
+    const newPlanner = [...prev];
+    newPlanner[qIdx].slots[sIdx] = {};
+    return newPlanner;
+  });
+};
 
-          {/* Standalone requirements */}
-          {remainingStandaloneAvailabilities.length > 0 && (
-            <ul className="requirements-list">
-              {remainingStandaloneAvailabilities.map((sr) => (
-                <li key={sr.course_id} className="requirement-item">
-                  <span className="requirement-text">{sr.code}</span>
-                  <span className="term-container">
-                    {sr.availability &&
-                      sr.availability.split(", ").map((term) => (
-                        <span
-                          key={term}
-                          className={`term-badge ${term.toLowerCase()}`}
-                        >
-                          {term}
-                        </span>
-                      ))}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
+const handlePlannerGroupInputBlur = async (
+  qIdx: number,
+  sIdx: number,
+  group: RemainingGroupRequirement,
+  courseCode: string
+) => {
+  const key = getGroupKey(group);
+  const code = courseCode.trim();
 
-          {/* Group requirements */}
-          <h3>
-            This shows the combined availability of the group. Click on a
-            specific quarter for more details
-          </h3>
-          {remainingGroupAvailabilities.length > 0 && (
-            <ul className="requirements-list">
-              {remainingGroupAvailabilities.map((gr) => (
-                <li key={gr.group_instance} className="requirement-item">
-                  <span className="requirement-text">{gr.description}</span>
-                  <span className="term-container">
-                    {gr.availability &&
-                      gr.availability.split(", ").map((term) => (
-                        <span
-                          key={term}
-                          className={`term-badge ${term.toLowerCase()}`}
-                          style={{ cursor: "pointer" }}
-                          onClick={async () => {
-                            try {
-                              const res = await fetch(
-                                `${BASE_URL}/api/group-term-courses`,
-                                {
-                                  method: "POST",
-                                  headers: { "Content-Type": "application/json" },
-                                  body: JSON.stringify({
-                                    groupId: gr.group_id,
-                                    collegeId: selectedCollege,
-                                    term,
-                                  }),
-                                }
-                              );
-                              const data = await res.json();
-                              setClickedGroupCourses(data);
-                              console.log(clickedGroupCourses);
-                              setClickedGroupLabel(
-                                `${gr.description} — ${term}`
-                              );
-                            } catch (err) {
-                              console.error(err);
-                            }
-                          }}
-                        >
-                          {term}
-                        </span>
-                      ))}
-                  </span>
-                </li>
-              ))}
-            </ul>
+  if (!code) {
+    // Clear error + chosenCourse if input empty
+    setPlannerGroupErrors((prev) => {
+      const next = new Map(prev);
+      next.delete(key);
+      return next;
+    });
+
+    setPlannerQuarters((prev) => {
+      const newPlanner = [...prev];
+      newPlanner[qIdx].slots[sIdx].chosenCourse = undefined;
+      return newPlanner;
+    });
+
+    return;
+  }
+
+  try {
+    const res = await fetch(
+      `${BASE_URL}/api/groups/${group.group_id}/validate-v2?courseCode=${encodeURIComponent(code)}`
+    );
+    const { valid, course } = await res.json();
+
+    setPlannerGroupErrors((prev) => {
+      const next = new Map(prev);
+
+      // --- Check standalone conflicts ---
+      const isInStandalone = remainingStandaloneAvailabilities.some(
+        (s) => s.code.toUpperCase() === code.toUpperCase()
+      );
+
+      // --- Check other group slots ---
+      const isInOtherGroup = plannerQuarters.some((quarter, q) =>
+        quarter.slots.some((slot, s) =>
+          slot.groupKey &&
+          slot.chosenCourse?.code.toUpperCase() === code.toUpperCase() &&
+          !(q === qIdx && s === sIdx) // not the same slot
+        )
+      );
+
+      if (!valid || !course) {
+        next.set(key, `${code} is not valid for this group.`);
+      } else if (isInStandalone) {
+        next.set(key, `${code} is already a standalone requirement.`);
+      } else if (isInOtherGroup) {
+        next.set(key, `${code} has already been entered in another group.`);
+      } else {
+        next.delete(key);
+
+        // Store chosen course in planner slot
+        setPlannerQuarters((prev) => {
+          const newPlanner = [...prev];
+          newPlanner[qIdx].slots[sIdx].chosenCourse = course;
+          return newPlanner;
+        });
+      }
+
+      return next;
+    });
+  } catch {
+    setPlannerGroupErrors((prev) => {
+      const next = new Map(prev);
+      next.set(key, "Validation failed (network error).");
+      return next;
+    });
+  }
+};
+
+  // === JSX ===
+  return (
+    <div className="page-container">
+      <div className="page">
+        <div className="column">
+          <div className="box">
+            <div>{warmingUp && <p>⏳ Waking up backend… this may take a few seconds</p>}</div>
+            <h2>PATHWAY SELECTOR</h2>
+
+            {/* College Dropdown */}
+            <div className="dropdown">
+              <label>
+                College:
+                <select
+                  value={selectedCollege ?? ""}
+                  onChange={handleCollegeChange}
+                  disabled={locked}
+                >
+                  <option value="">-- Select a College --</option>
+                  {colleges.map((c) => (
+                    <option key={c.college_id} value={c.college_id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            {/* Pathway Dropdown */}
+            <div className="dropdown">
+              <label>
+                Pathway:
+                <select
+                  value={selectedPathway ?? ""}
+                  onChange={handlePathwayChange}
+                  disabled={!selectedCollege || locked}
+                >
+                  <option value="">-- Select a Pathway --</option>
+                  {pathways.map((p, idx) => (
+                    <option key={idx} value={p.name}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            {/* Degree Dropdown */}
+            <div className="dropdown">
+              <label>
+                Degree:
+                <select
+                  value={selectedDegree ?? ""}
+                  onChange={handleDegreeChange}
+                  disabled={!selectedPathway || locked}
+                >
+                  <option value="">-- Select a Degree --</option>
+                  {degrees.map((d) => (
+                    <option key={d.degree_id} value={d.degree_id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            {/* CONFIRM Button */}
+            <button onClick={handleConfirm} disabled={!selectedDegree || locked}>
+              CONFIRM
+            </button>
+          </div>
+
+          {/* Requirements Display */}
+          {(groupRequirements.length > 0 || standaloneRequirements.length > 0) && (
+            <div className="box">
+              <h2>REQUIRED COURSES</h2>
+
+              {/* Standalone Requirements */}
+              <h3>Check the box of classes you have taken</h3>
+              {standaloneRequirements.length > 0 && (
+                <ul className="requirements-list">
+                  {standaloneRequirements.map((req) => (
+                    <li key={req.course_id}>
+                      <label>
+                        <input
+                          type="checkbox"
+                          className="checkbox"
+                          checked={takenStandaloneRequirements.some(
+                            (s) => s.course_id === req.course_id
+                          )}
+                          onChange={(e) =>
+                            handleStandaloneCheck(req, e.target.checked)
+                          }
+                          disabled={locked}
+                        />
+                        {req.code}
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {/* Group Requirements */}
+              <h3>Fill in the box the class you have taken in each groups</h3>
+              {groupRequirements.length > 0 && (
+                <ul className="requirements-list">
+                  {groupRequirements.map((group) => {
+                    const key = group.group_instance;
+                    return (
+                      <li key={key} className="group-item">
+                        <div className="group-description">
+                          {group.description}
+                        </div>
+                        <input
+                          type="text"
+                          className="textbox"
+                          placeholder="Enter course code"
+                          value={takenGroupRequirements.get(key) ?? ""}
+                          onChange={(e) =>
+                            handleGroupInputChange(key, e.target.value)
+                          }
+                          onBlur={(e) =>
+                            handleGroupInputBlur(key, group, e.target.value)
+                          }
+                          disabled={locked}
+                        />
+                        {groupErrors.has(key) && (
+                          <div className="error-text">{groupErrors.get(key)}</div>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+
+              <button
+                className={`button ${locked ? "button-unlock" : "button-lock"}`}
+                onClick={handleLockToggle}
+                disabled={groupErrors.size !== 0}
+              >
+                {locked ? "UNLOCK" : "LOCK-IN"}
+              </button>
+            </div>
           )}
         </div>
+      </div>
 
-        {/* Clicked group-term courses */}
-        {clickedGroupCourses.length > 0 && (
+  {locked && (
+    <>
+      <div className="page">
+        <div className="column">
           <div className="box">
-            <h3>{`${clickedGroupLabel.split("—").pop()?.trim()} Courses`}</h3>
-            <ul className="requirements-list">
-              {clickedGroupCourses
-                .slice()
-                .sort((a, b) => a.code.localeCompare(b.code))
-                .map((c) => (
-                  <li key={c.course_id}>{c.code}</li>
-                ))}
-            </ul>
+            <h2>Remaining Requirements with Availability</h2>
+
+            {remainingStandaloneAvailabilities.length > 0 && (
+              <ul className="requirements-list">
+                {remainingStandaloneAvailabilities.map(sr => {
+                  const used = usedStandalone.has(sr.course_id);
+                  return (
+                    <li
+                      key={sr.course_id}
+                      className="requirement-item"
+                      draggable={!used}
+                      onDragStart={e => handleDragStart(e, sr)}
+                      style={{ opacity: used ? 0.5 : 1, cursor: used ? "not-allowed" : "grab" }}
+                    >
+                      <span className="requirement-text">{sr.code}</span>
+                      <span className="term-container">
+                        {sr.availability?.split(", ").map(term => (
+                          <span key={term} className={`term-badge ${term.toLowerCase()}`}>{term}</span>
+                        ))}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+
+            {remainingGroupAvailabilities.length > 0 && (
+              <>
+                <h3>Group Requirements</h3>
+                <ul className="requirements-list">
+                  {remainingGroupAvailabilities.map(gr => {
+                    const key = getGroupKey(gr);
+                    const used = usedGroup.has(key);
+                    return (
+                      <li
+                        key={key}
+                        className="requirement-item"
+                        draggable={!used}
+                        onDragStart={e => handleDragStart(e, gr)}
+                        style={{ opacity: used ? 0.5 : 1, cursor: used ? "not-allowed" : "grab" }}
+                      >
+                        <span className="requirement-text">{gr.description}</span>
+                        <span className="term-container">
+                          {gr.availability?.split(", ").map(term => (
+                            <span
+                              key={term}
+                              className={`term-badge ${term.toLowerCase()}`}
+                              style={{ cursor: "pointer" }}
+                              onClick={() => handleGroupAvailabilityClick(gr, term)}
+                            >
+                              {term}
+                            </span>
+                          ))}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
+            )}
+
+            {clickedGroupCourses.length > 0 && (
+                  <div className="box">
+                    <h3>{`${clickedGroupLabel
+                      .split("—")
+                      .pop()
+                      ?.trim()} Courses`}</h3>
+                    <ul className="requirements-list">
+                      {clickedGroupCourses
+                        .slice()
+                        .sort((a, b) => a.code.localeCompare(b.code))
+                        .map((c) => (
+                          <li key={c.course_id}>{c.code}</li>
+                        ))}
+                    </ul>
+                  </div>
+                )}
           </div>
-        )}
+        </div>
+      </div>
+
+      {/* --- Planner Section --- */}
+  <div className="planner-layout">
+    {/* Left panel: Planner controls */}
+    <div className="planner-panel">
+      <div className="planner-controls">
+        <h2>Planner</h2>
+        <div className="planner-row">
+          {/* Quarter Dropdown */}
+          <div className="dropdown-vertical">
+            <label>
+              Next academic quarter:&nbsp;
+              <select
+                value={selectedQuarter ?? ""}
+                onChange={e => setSelectedQuarter(e.target.value || null)}
+              >
+                <option value="">-- Select Quarter --</option>
+                <option value="Fall">Fall</option>
+                <option value="Winter">Winter</option>
+                <option value="Spring">Spring</option>
+                <option value="Summer">Summer</option>
+              </select>
+            </label>
+          </div>
+
+          {/* Year input */}
+          <div className="dropdown">
+            <label>
+              Year:&nbsp;
+              <input
+                type="text"
+                className="small-textbox"
+                value={plannerYear ?? ""}
+                onChange={e => setPlannerYear(e.target.value || null)}
+                placeholder={`e.g. ${new Date().getFullYear()}`}
+              />
+            </label>
+          </div>
+
+          {/* Skip Summer */}
+          <div className="dropdown">
+            <label>
+              <input
+                type="checkbox"
+                checked={summerSkip}
+                onChange={e => setSummerSkip(e.target.checked)}
+              />
+              &nbsp;Skip Summer
+            </label>
+          </div>
+        </div>
       </div>
     </div>
-  </>
+
+    {/* Right panel: Quarter cards */}
+    <div className="quarters-panel">
+      {selectedQuarter && plannerYear && (
+        <div className="planner-quarters">
+          {plannerQuarters.map((q, qIdx) => (
+            <div key={`${q.name}-${q.year}`} className="quarter-card box">
+              <h3>{q.name} {q.year}</h3>
+
+              {!q.isPlaceholder && (
+                <div className="quarter-slots">
+                  {q.slots.map((slot, sIdx) => (
+                    <div
+  key={sIdx}
+  className="quarter-slot"
+  onDragOver={(e) => e.preventDefault()}
+  onDrop={(e) => handleDropCourse(qIdx, sIdx, e)}
+>
+  {slot.course ? (
+    <div
+      className="slot-course-wrapper"
+      draggable
+      onDragStart={(e) => handleDragStart(e, slot.course!, qIdx, sIdx)}
+    >
+      <span className="slot-course">
+        {"course_id" in slot.course
+          ? slot.course.code
+          : slot.course.description}
+      </span>
+
+      <div className="slot-controls">
+        {"availability" in slot.course && slot.course.availability && (
+          <span className="term-container">
+            {slot.course.availability.split(", ").map((term) => (
+              <span key={term} className={`term-badge ${term.toLowerCase()}`}>
+                {term}
+              </span>
+            ))}
+          </span>
+        )}
+        <button
+          className="remove-btn"
+          onClick={() => handleRemoveCourse(qIdx, sIdx)}
+        >
+          –
+        </button>
+
+        {"group_id" in slot.course && (
+  <div className="group-input">
+    <input
+      type="text"
+      placeholder="Enter course code"
+      defaultValue={slot.chosenCourse?.code ?? ""}
+      onBlur={(e) =>
+        handlePlannerGroupInputBlur(qIdx, sIdx, slot.course as RemainingGroupRequirement, e.target.value)
+      }
+      className="group-course-textbox"
+    />
+    {plannerGroupErrors.has(getGroupKey(slot.course)) && (
+      <div className="error-text">
+        {plannerGroupErrors.get(getGroupKey(slot.course))}
+      </div>
+    )}
+  </div>
 )}
 
-
-
-
-
+      </div>
     </div>
-  );
-}
+  ) : (
+    <span className="slot-placeholder">Drag a course here</span>
+  )}
+</div>
+
+
+                    
+                  ))}
+                </div>
+              )}
+
+              {q.isPlaceholder && (
+                <button onClick={() => addSummerQuarter(q.year)}>Add Summer</button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="quarter-add-button">
+        <button onClick={addNextQuarter}>Add Next Quarter</button>
+      </div>
+    </div>
+
+    
+    <div style={{ marginTop: 12, width: "100%", display: "flex", flexDirection: "column", gap: 8 }}>
+      <div>
+        <button
+          onClick={handleVerifyPlanner}
+          disabled={!canVerify || verifyLoading}
+          style={{
+            padding: "8px 12px",
+            background: canVerify ? "#007bff" : "#999",
+            color: "white",
+            border: "none",
+            borderRadius: 6,
+            cursor: canVerify ? "pointer" : "not-allowed",
+          }}
+        >
+          {verifyLoading ? "Verifying..." : "Verify Planner"}
+        </button>
+      </div>
+
+      {/* Show pre-check error (missing chosenCourse) */}
+      {!canVerify && (
+        <div style={{ color: "#b34700", fontSize: 13 }}>
+          Some group slots are missing a chosen course. Please pick a course for every group slot before verifying.
+        </div>
+      )}
+
+      {/* Show result */}
+      {verifyError && (
+        <div style={{ color: "red", fontSize: 13 }}>
+          Error verifying planner: {verifyError}
+        </div>
+      )}
+
+      {verifyResult && (
+        <div style={{ marginTop: 6 }}>
+          <h4 style={{ margin: "6px 0" }}>Verifier Results</h4>
+
+          {verifyResult.violations.length === 0 ? (
+            <div style={{ color: "#1a7f1a" }}>No violations found — planner appears valid.</div>
+          ) : (
+            <div>
+              <div style={{ color: "#b71c1c", fontWeight: 600 }}>{verifyResult.violations.length} violation(s) found:</div>
+              <ul>
+                {verifyResult.violations.map((v, i) => (
+                  <li key={i} style={{ marginBottom: 6 }}>
+                    <strong>{v.course_id}</strong>: {v.message}
+                    {v.missingPrereqs && v.missingPrereqs.length > 0 && (
+                      <div style={{ marginLeft: 8 }}>
+                        Missing prerequisites: {v.missingPrereqs.join(", ")}
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {verifyResult.advisory.length > 0 && (
+            <div style={{ marginTop: 8 }}>
+              <div style={{ color: "#8a6700", fontWeight: 600 }}>Advisories</div>
+              <ul>
+                {verifyResult.advisory.map((a, i) => (
+                  <li key={i} style={{ marginBottom: 6 }}>
+                    {a.course_id ? <strong>{a.course_id}</strong> : null} {a.message}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+
+    
+  </div>
+    </>
+  )}
+      </div>
+    );
+  }

@@ -13,7 +13,7 @@ html, body, #root {
 
 .page-container {
   display: flex;
-  gap: 30px;              /* space between the two pages */
+  gap: 0px;              /* space between the two pages */
   align-items: flex-start; /* align content at the top */
 }
 
@@ -33,7 +33,7 @@ html, body, #root {
 .column {
   display: flex;
   flex-direction: column;
-  gap: 20px;            /* space between boxes */
+  gap: 10px;            /* space between boxes */
   align-items: flex-start; /* ensure left alignment */
 }
 
@@ -222,5 +222,235 @@ html, body, #root {
   background-color: #ffcc02; /* yellow */
 }
 
+/* ========================
+   Planner Row
+======================== */
+.planner-row {
+  display: flex !important;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+}
 
+/* Match existing label/text alignment */
+.planner-row label {
+  font-weight: 500;
+  color: #000;
+}
+
+/* ========================
+   Planner Quarters & Slots
+======================== */
+/* Planner container — match spacing from requirements section */
+.planner-quarters {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 10px;
+  width: 100%;
+}
+
+  
+/* Quarter card: two-column layout (left = label, right = slots) */
+.quarter-card {
+  background-color: #81c6ff;
+  display: grid;
+  grid-template-columns: 140px 1fr; /* left column width (label) + flexible slots column */
+  align-items: start;               /* align h3 to top of slots */
+  padding: 8px 12px;                /* keep same inset as requirement items */
+  box-sizing: border-box;
+  width: 100%;
+  border-radius: 4px;
+}
+
+/* h3 sits in the left column, vertically aligned with the top slot */
+.quarter-card h3 {
+  margin: 0;
+  padding: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #000;
+  display: flex;
+  align-items: center;   /* vertically center with the slots' top row */
+  justify-content: flex-start;
+  white-space: nowrap;   /* keeps "Fall 2025" on one line */
+}
+
+/* Slots column — fills the remaining space */
+.quarter-slots {
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Each slot visually matches .requirements-list li exactly */
+.quarter-slot {
+  background-color: #f1f1f1; /* same light-gray */
+  padding: 8px 12px;         /* same internal spacing */
+  margin-bottom: 5px;        /* same spacing between items */
+  border-radius: 4px;
+  text-align: left;
+  width: 100%;
+  box-sizing: border-box;
+  border: none;
+}
+
+
+/* Visual feedback on drag */
+.quarter-slot.drag-over {
+  background-color: #e0f0ff;
+  border-color: #007bff;
+}
+
+/* Inner course wrapper – matches requirement-item layout */
+.slot-course-wrapper {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: transparent;
+  padding: 0;
+  font-size: 0.95rem;
+}
+
+/* Container for badges + remove button */
+.slot-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Term badges inside slot-controls */
+.slot-controls .term-badge {
+  margin: 0;
+  font-size: 0.75rem;
+  padding: 1px 4px;
+}
+
+/* Course text same tone as requirement-text */
+.slot-course {
+  flex-shrink: 0;
+  color: #000;
+}
+
+.remove-btn {
+  background-color: #ff4d4d;
+  border: none;
+  color: white;
+  font-weight: bold;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: flex;              /* centers the dash */
+  align-items: center;        /* vertically center */
+  justify-content: center;    /* horizontally center */
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 0;             /* remove extra baseline gap */
+  padding: 0;
+}
+
+.remove-btn:hover {
+  background-color: #ff1a1a;
+}
+
+/* Placeholder for empty slots — soft and consistent */
+.slot-placeholder {
+  display: block;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  background-color: #fafafa;
+  border: 1px dashed #aaa;
+  border-radius: 4px;
+  font-style: italic;
+}
+
+/* Planner + Quarters side-by-side container */
+.planner-layout {
+  display: flex;
+  gap: 30px;              /* space between left and right panels */
+  align-items: flex-start; /* top alignment */
+  width: 100%;
+}
+
+/* Left panel: Planner controls */
+.planner-panel {
+  flex: 0 0 auto;           /* shrink to fit content */
+  display: flex;
+  flex-direction: column;
+  gap: 0px;
+  width: max-content;        /* ensure panel only as wide as content */
+}
+
+/* Planner controls container — smaller and tighter than .box */
+.planner-controls {
+  background-color: #81c6ff;  /* soft background */
+  padding: 8px 12px;           /* tighter padding */
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  width: max-content;           /* shrink to fit content */
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-sizing: border-box;
+  margin-top: 20px;
+}
+
+.planner-controls h2 {
+  color: #000000;               /* header color */
+  margin: 0 0 12px 0;           /* remove top margin, keep bottom spacing */
+  padding: 0 0 4px 0;           /* space between text and bottom border */
+  border-bottom: 2px solid #000000; /* horizontal line */
+  text-align: center;
+}
+
+
+
+/* Right panel: Quarters container */
+.quarters-panel {
+  flex: 0 0 750px;           /* fixed width for cards */
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Optional responsive: stack vertically on small screens */
+@media (max-width: 720px) {
+  .planner-layout {
+    flex-direction: column;
+  }
+  .planner-panel {
+    flex: 1;
+  }
+}
+
+/* Small width input/select that fits content */
+.small-textbox {
+  width: auto;             /* only as wide as content */
+  max-width: 100px;        /* optional: prevent too wide */
+  padding: 4px 8px;
+  font-size: 0.95rem;
+  box-sizing: border-box;
+}
+
+.dropdown-vertical {
+  font-size: 0.95rem;
+}
+
+/* Vertical dropdown layout */
+.dropdown-vertical label {
+  display: flex;
+  flex-direction: column;  /* stack label text and input */
+  gap: 4px;                /* space between text and dropdown */
+  font-weight: 500;        /* optional: make label text stand out */
+}
+
+.dropdown-vertical select,
+.dropdown-vertical input {
+  width: auto;             /* shrink to fit content */
+  display: inline-block;
+}
 
