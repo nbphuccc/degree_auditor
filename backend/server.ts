@@ -548,7 +548,9 @@ app.post("/api/verify-planner", async (req, res) => {
       remainingStandaloneCourses: RemainingStandaloneRequirement[];
     } = req.body || {};
 
-    const remainingSet = new Set<string>((remainingStandaloneCourses || []).map((c) => c.course_id));
+    const remainingSet = new Set<string>(
+      (remainingStandaloneCourses || []).map((c: RemainingStandaloneRequirement) => c.course_id)
+    );
 
     const availMap = new Map<string, RemainingStandaloneRequirement>();
     for (const c of remainingStandaloneCourses || []) {
@@ -668,6 +670,8 @@ app.post("/api/verify-planner", async (req, res) => {
       }
 
       const missingSet = computeMissingPrereqs(cId, prereqMap, scheduledSet, availMap);
+      console.log("[VerifyPlanner DEBUG] remainingSet:", Array.from(remainingSet));
+      console.log("[VerifyPlanner DEBUG] missingSet:", Array.from(missingSet));
 
       const missingInRemaining = missingSet.filter(m => remainingSet.has(m.course_id));
       const missingNotInRemaining = missingSet.filter(m => !remainingSet.has(m.course_id));

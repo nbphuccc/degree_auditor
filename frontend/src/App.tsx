@@ -1116,61 +1116,6 @@ const handlePlannerGroupInputBlur = async (
       </div>
     </div>
 
-    <div className="planner-display mt-4">
-  <h2 className="text-xl font-semibold mb-2">Planner Quarters</h2>
-  {plannerQuarters.length === 0 ? (
-    <p className="text-gray-600">No quarters scheduled yet.</p>
-  ) : (
-    <div className="space-y-4">
-      {plannerQuarters.map((quarter, _qIdx) => (
-        <div key={`${quarter.name}-${quarter.year}`} className="p-2 border rounded-md">
-          <h3 className="font-medium">{quarter.name} {quarter.year}</h3>
-          {quarter.slots.length === 0 ? (
-            <p className="ml-4 text-gray-600">No slots in this quarter.</p>
-          ) : (
-            <ul className="ml-4 list-disc">
-              {quarter.slots.map((slot, sIdx) => (
-                <li key={sIdx}>
-  {slot.groupKey ? (
-    <>
-      Group: {slot.groupKey} &mdash; Chosen: {slot.chosenCourse ? slot.chosenCourse.code : "None"}
-    </>
-  ) : slot.course && "course_id" in slot.course ? (
-    `${slot.course.code} (${slot.course.course_id})`
-  ) : (
-    "Empty slot"
-  )}
-</li>
-
-              ))}
-            </ul>
-          )}
-        </div>
-      ))}
-    </div>
-  )}
-
-  <h2 className="text-xl font-semibold mt-6 mb-2">Derived Schedule</h2>
-  {plannerQuarters.length === 0 ? (
-    <p className="text-gray-600">Schedule will appear here after adding quarters.</p>
-  ) : (() => {
-    const schedule = buildScheduleFromPlannerQuarters();
-    if (schedule.length === 0) {
-      return <p className="text-gray-600">No courses selected yet.</p>;
-    }
-    return (
-      <ol className="ml-4 list-decimal">
-        {schedule.map((item, idx) => (
-          <li key={idx}>
-            {item.course.code} ({item.course.course_id}) &mdash; Term: {item.termName} (Index: {item.termIndex})
-          </li>
-        ))}
-      </ol>
-    );
-  })()}
-</div>
-
-
     <div className="planner-verifier mt-4">
   {/* Verify Planner Button */}
   <button
