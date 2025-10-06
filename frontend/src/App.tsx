@@ -977,128 +977,118 @@ const handlePlannerGroupInputBlur = async (
     {/* Left panel: Planner controls */}
     <div className="planner-panel">
       <div className="planner-controls">
-        <h2>Planner</h2>
-        <div className="planner-row">
-          {/* Quarter Dropdown */}
-          <div className="dropdown-vertical">
-            <label>
-              Next academic quarter:&nbsp;
-              <select
-                value={selectedQuarter ?? ""}
-                onChange={e => setSelectedQuarter(e.target.value || null)}
-              >
-                <option value="">-- Select Quarter --</option>
-                <option value="Fall">Fall</option>
-                <option value="Winter">Winter</option>
-                <option value="Spring">Spring</option>
-                <option value="Summer">Summer</option>
-              </select>
-            </label>
-          </div>
+  <h2>Planner</h2>
 
-          {/* Year input */}
-          <div className="dropdown">
-            <label>
-              Year:&nbsp;
-              <input
-                type="text"
-                className="small-textbox"
-                value={plannerYear ?? ""}
-                onChange={e => setPlannerYear(e.target.value || null)}
-                placeholder={`e.g. ${new Date().getFullYear()}`}
-              />
-            </label>
-          </div>
-
-          {/* Skip Summer */}
-          <div className="dropdown">
-            <label>
-              <input
-                type="checkbox"
-                checked={summerSkip}
-                onChange={e => setSummerSkip(e.target.checked)}
-              />
-              &nbsp;Skip Summer
-            </label>
-          </div>
-
-          <div className="planner-verifier mt-4">
-  {/* Verify Planner Button */}
-  <button
-    onClick={handleVerifier}
-    disabled={!canVerify || verifyLoading}
-    className={`px-4 py-2 rounded-md font-semibold text-white ${
-      !canVerify || verifyLoading ? "bg-gray-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"
-    }`}
-  >
-    {verifyLoading ? "Verifying..." : "Verify Planner"}
-  </button>
-
-  {/* Verifier Result Display */}
-<div className="verifier-section mt-4">
-  {verifyLoading && <p className="text-blue-700">Verifying planner...</p>}
-
-  {verifyError && <p className="text-red-700">Error: {verifyError}</p>}
-
-  {verifyResult && (
-    <div className="verifier-result p-4 bg-gray-50 rounded-md shadow-sm">
-      <h2 className="text-xl font-semibold mb-2">Verifier Results</h2>
-
-      {/* Violations */}
-      <section className="mb-4">
-        <h3 className="text-lg font-medium text-red-700">Violations</h3>
-        {verifyResult.violations.length === 0 ? (
-          <p className="text-green-700">No violations detected!</p>
-        ) : (
-          <ul className="ml-4 list-disc">
-            {verifyResult.violations.map((v, idx) => (
-              <li key={idx} className="mb-2">
-                {v.message}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {/* Advisories */}
-      <section className="mb-4">
-        <h3 className="text-lg font-medium text-yellow-700">Advisories</h3>
-        {verifyResult.advisory.length === 0 ? (
-          <p className="text-green-700">No advisories!</p>
-        ) : (
-          <ul className="ml-4 list-disc">
-            {verifyResult.advisory.map((a, idx) => (
-              <li key={idx} className="mb-2">
-                {a.message}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {/* Suggested Order */}
-      <section>
-        <h3 className="text-lg font-medium text-blue-700">Suggested Order</h3>
-        {verifyResult.suggestedOrder.length === 0 ? (
-          <p>No suggested order available.</p>
-        ) : (
-          <ol className="ml-4 list-decimal">
-            {verifyResult.suggestedOrder.map((c) => (
-              <li key={c.course_id}>
-                {c.code}
-              </li>
-            ))}
-          </ol>
-        )}
-      </section>
+  <div className="planner-row">
+    {/* Quarter Dropdown */}
+    <div className="dropdown-vertical">
+      <label>
+        Next academic quarter:
+        <select
+          value={selectedQuarter ?? ""}
+          onChange={e => setSelectedQuarter(e.target.value || null)}
+        >
+          <option value="">-- Select Quarter --</option>
+          <option value="Fall">Fall</option>
+          <option value="Winter">Winter</option>
+          <option value="Spring">Spring</option>
+          <option value="Summer">Summer</option>
+        </select>
+      </label>
     </div>
-  )}
-</div>
 
-</div>
+    {/* Year Input */}
+    <div className="dropdown">
+      <label>
+        Year:
+        <input
+          type="text"
+          className="small-textbox"
+          value={plannerYear ?? ""}
+          onChange={e => setPlannerYear(e.target.value || null)}
+          placeholder={`e.g. ${new Date().getFullYear()}`}
+        />
+      </label>
+    </div>
 
+    {/* Skip Summer */}
+    <div className="dropdown">
+      <label>
+        <input
+          type="checkbox"
+          checked={summerSkip}
+          onChange={e => setSummerSkip(e.target.checked)}
+        />
+        Skip Summer
+      </label>
+    </div>
+  </div>
+
+  {/* Verify Planner Button */}
+  <div className="planner-verifier mt-4">
+    <button
+      onClick={handleVerifier}
+      disabled={!canVerify || verifyLoading}
+    >
+      {verifyLoading ? "Verifying..." : "Verify Planner"}
+    </button>
+
+    {/* Verifier Result Display */}
+    <div className="verifier-section mt-4">
+      {verifyLoading && <p className="text-blue-700">Verifying planner...</p>}
+      {verifyError && <p className="text-red-700">Error: {verifyError}</p>}
+
+      {verifyResult && (
+        <div className="verifier-result">
+          <h2>Verifier Results</h2>
+
+          {/* Violations */}
+          <section>
+            <h3 className="text-red-700">Violations</h3>
+            {verifyResult.violations.length === 0 ? (
+              <p className="text-green-700">No violations detected!</p>
+            ) : (
+              <ul>
+                {verifyResult.violations.map((v, idx) => (
+                  <li key={idx}>{v.message}</li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          {/* Advisories */}
+          <section>
+            <h3 className="text-yellow-700">Advisories</h3>
+            {verifyResult.advisory.length === 0 ? (
+              <p className="text-green-700">No advisories!</p>
+            ) : (
+              <ul>
+                {verifyResult.advisory.map((a, idx) => (
+                  <li key={idx}>{a.message}</li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          {/* Suggested Order */}
+          <section>
+            <h3 className="text-blue-700">Suggested Order</h3>
+            {verifyResult.suggestedOrder.length === 0 ? (
+              <p>No suggested order available.</p>
+            ) : (
+              <ol>
+                {verifyResult.suggestedOrder.map((c) => (
+                  <li key={c.course_id}>{c.code}</li>
+                ))}
+              </ol>
+            )}
+          </section>
         </div>
-      </div>
+      )}
+    </div>
+  </div>
+</div>
+
 
       
     </div>
