@@ -642,11 +642,33 @@ app.post("/api/verify-planner", async (req, res) => {
     const violations: Violation[] = [];
     const advisory: Advisory[] = [];
 
+    // Check chronological order
+    for (let i = 0; i < topoSortedIds.length; i++) {
+  const courseId = topoSortedIds[i];
+  if (!scheduledMap.has(courseId)) continue;
+
+  const termIndex = scheduledMap.get(courseId)!.termIndex;
+  const prereqs = prereqMap.get(courseId) || [];
+
+  for (const prereqId of prereqs) {
+    if (scheduledMap.has(prereqId)) {
+      const prereqTerm = scheduledMap.get(prereqId)!.termIndex;
+      if (prereqTerm >= termIndex) {
+        violations.push({
+          course: scheduledMap.get(courseId)!.course,
+          message: `${scheduledMap.get(courseId)!.course.code} is scheduled before its prerequisite ${prereqId}`,
+        });
+      }
+    }
+  }
+}
+
     for (const schedItem of schedule || []) {
       const cId = schedItem.course.course_id;
       const termIndex = schedItem.termIndex;
       const termName = schedItem.termName;
 
+      // Check satisfied vs min_courses
       const grp = prereqGroupMap.get(cId);
       if (grp) {
         const satisfiedInGroup = grp.members.filter(
