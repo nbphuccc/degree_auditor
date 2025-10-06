@@ -454,12 +454,6 @@ html, body, #root {
   display: inline-block;
 }
 
-.planner-verifier {
-  display: flex;
-  justify-content: center; /* centers horizontally */
-  margin-top: 1rem; /* optional spacing above */
-}
-
 /* Verify Planner Button */
 .planner-verifier button {
   padding: 0.6rem 1.2rem;
@@ -471,10 +465,12 @@ html, body, #root {
   color: #fff;
   background-color: #1c6d0c;
   transition: background-color 0.2s ease, transform 0.1s ease;
+  display: block;
+  margin: 0 auto;
 }
 
 .planner-verifier button:hover:not(:disabled) {
-  background-color: #2563eb;
+  background-color: #06410f;
   transform: translateY(-1px);
 }
 
