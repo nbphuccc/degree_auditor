@@ -520,25 +520,44 @@ function computeMissingPrereqs(
   visited: Set<string> = new Set()
 ): RemainingStandaloneRequirement[] {
   const result: RemainingStandaloneRequirement[] = [];
-  if (visited.has(course_id)) return result;
+
+  if (visited.has(course_id)) {
+    console.log(`Already visited ${course_id}, skipping`);
+    return result;
+  }
   visited.add(course_id);
 
   const prereqs = prereqMap.get(course_id) ?? [];
+  console.log(`➡️  ${course_id} prereqs:`, prereqs);
+
   for (const p of prereqs) {
-    if (!scheduledSet.has(p) && availMap.has(p)) {
-      const r = availMap.get(p)!;
-      result.push(r);
-      const upstream = computeMissingPrereqs(p, prereqMap, scheduledSet, availMap, visited);
-      result.push(...upstream);
+    if (!scheduledSet.has(p)) {
+      if (availMap.has(p)) {
+        const r = availMap.get(p)!;
+        console.log(`Missing prereq ${p} (added to result)`);
+        result.push(r);
+
+        const upstream = computeMissingPrereqs(p, prereqMap, scheduledSet, availMap, visited);
+        result.push(...upstream);
+      } else {
+        console.log(`Prereq ${p} not in availMap — skipping`);
+      }
+    } else {
+      console.log(`${p} already scheduled`);
     }
   }
+
   const seen = new Set<string>();
-  return result.filter((x) => {
+  const unique = result.filter((x) => {
     if (seen.has(x.course_id)) return false;
     seen.add(x.course_id);
     return true;
   });
+
+  console.log(`   ↩️ Returning from ${course_id}:`, unique.map(x => x.course_id));
+  return unique;
 }
+
 
 // ==========================
 // Route implementation
@@ -718,7 +737,9 @@ app.post("/api/verify-planner", async (req, res) => {
         }
       }
 
-      // Find all possible missing prereqs (chain). When there is only 1 missing prereq, will coincide with the previous method.
+      // Find all possible missing prereqs (chain) within the remaining standalone courses
+      // Does not find prereqs outside remaining standalone courses.
+      // When there is only 1 missing prereq, will coincide with the previous method.
       const missingSet = computeMissingPrereqs(cId, prereqMap, scheduledSet, availMap);
 
       const missingInRemaining = missingSet.filter(m => remainingSet.has(m.course_id));
