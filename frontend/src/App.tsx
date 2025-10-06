@@ -554,29 +554,50 @@ const handleDragStart = (
   );
 };
 
-const handleDropCourse = (targetQ: number, targetS: number, e: React.DragEvent<HTMLDivElement>) => {
+const handleDropCourse = (
+  targetQ: number,
+  targetS: number,
+  e: React.DragEvent<HTMLDivElement>
+) => {
   const data = e.dataTransfer.getData("dragData");
   if (!data) return;
   const { course, qIdx, sIdx } = JSON.parse(data);
 
   setPlannerQuarters(prev => {
-    const newPlanner = [...prev];
+    const newPlanner = prev.map(q => ({
+      ...q,
+      slots: q.slots.map(s => ({ ...s }))
+    }));
 
-    // Case 1: Moving from planner
+    // If dropping from planner
     if (qIdx !== undefined && sIdx !== undefined) {
-      newPlanner[qIdx].slots[sIdx] = {}; // clear old slot
-    }
+      const sourceSlot = newPlanner[qIdx].slots[sIdx];
+      const targetSlot = newPlanner[targetQ].slots[targetS];
 
-    // Case 2: Dropping into target
-    newPlanner[targetQ].slots[targetS] = {
-      course,
-      groupKey: "group_id" in course ? getGroupKey(course) : undefined,
-    };
+      // Swap case
+      if (targetSlot.course) {
+        newPlanner[qIdx].slots[sIdx] = { ...targetSlot };
+        newPlanner[targetQ].slots[targetS] = { ...sourceSlot };
+      } else {
+        // Normal move
+        newPlanner[qIdx].slots[sIdx] = {};
+        newPlanner[targetQ].slots[targetS] = {
+          course,
+          groupKey: "group_id" in course ? getGroupKey(course) : undefined,
+        };
+      }
+    } else {
+      // Dragged from availabilities (not planner)
+      newPlanner[targetQ].slots[targetS] = {
+        course,
+        groupKey: "group_id" in course ? getGroupKey(course) : undefined,
+      };
+    }
 
     return newPlanner;
   });
 
-  // If dragged from availabilities, still need to update "used" sets
+  // Update used sets for availabilities
   if (qIdx === undefined) {
     if ("course_id" in course) {
       setUsedStandalone(prev => new Set(prev).add(course.course_id));
@@ -585,6 +606,7 @@ const handleDropCourse = (targetQ: number, targetS: number, e: React.DragEvent<H
     }
   }
 };
+
 
 const handleRemoveCourse = (qIdx: number, sIdx: number) => {
   const slot = plannerQuarters[qIdx].slots[sIdx];
@@ -1179,10 +1201,15 @@ const handlePlannerGroupInputBlur = async (
         </div>
       )}
 
-      <div className="quarter-add-button">
-        <button onClick={addNextQuarter}>Add Next Quarter</button>
-      </div>
+      {selectedQuarter && plannerYear && (
+  <div className="quarter-add-button">
+    <button onClick={addNextQuarter}>Add Next Quarter</button>
+  </div>
+)}
+
     </div>
+
+    
   </div>
     </>
   )}
