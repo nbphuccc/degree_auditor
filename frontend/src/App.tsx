@@ -1035,106 +1035,79 @@ const handlePlannerGroupInputBlur = async (
   </button>
 
   {/* Verifier Result Display */}
-  <div className="verifier-section mt-4">
-    {verifyLoading && <p className="text-blue-700">Verifying planner...</p>}
+<div className="verifier-section mt-4">
+  {verifyLoading && <p className="text-blue-700">Verifying planner...</p>}
 
-    {verifyError && <p className="text-red-700">Error: {verifyError}</p>}
+  {verifyError && <p className="text-red-700">Error: {verifyError}</p>}
 
-    {verifyResult && (
-      <div className="verifier-result p-4 bg-gray-50 rounded-md shadow-sm">
-        <h2 className="text-xl font-semibold mb-2">Verifier Results</h2>
+  {verifyResult && (
+    <div className="verifier-result p-4 bg-gray-50 rounded-md shadow-sm">
+      <h2 className="text-xl font-semibold mb-2">Verifier Results</h2>
 
-        {/* Violations */}
-        <section className="mb-4">
-          <h3 className="text-lg font-medium text-red-700">Violations</h3>
-          {verifyResult.violations.length === 0 ? (
-            <p className="text-green-700">No violations detected!</p>
-          ) : (
-            <ul className="ml-4 list-disc">
-              {verifyResult.violations.map((v, idx) => (
-                <li key={idx} className="mb-2">
-                  <strong>{v.course.code}</strong>: {v.message}
-                  {v.missingPrereqs && (
-                    <div className="ml-4">
-                      Missing prerequisites:
-                      <ul className="ml-2 list-disc">
-                        {v.missingPrereqs.map((c) => (
-                          <li key={c.course_id}>
-                            {c.code} ({c.course_id})
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+      {/* Violations */}
+      <section className="mb-4">
+        <h3 className="text-lg font-medium text-red-700">Violations</h3>
+        {verifyResult.violations.length === 0 ? (
+          <p className="text-green-700">No violations detected!</p>
+        ) : (
+          <ul className="ml-4 list-disc">
+            {verifyResult.violations.map((v, idx) => (
+              <li key={idx} className="mb-2">
+                {v.message}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
-        {/* Advisories */}
-        <section className="mb-4">
-          <h3 className="text-lg font-medium text-yellow-700">Advisories</h3>
-          {verifyResult.advisory.length === 0 ? (
-            <p className="text-green-700">No advisories!</p>
-          ) : (
-            <ul className="ml-4 list-disc">
-              {verifyResult.advisory.map((a, idx) => (
-                <li key={idx} className="mb-2">
-                  {a.course ? (
-                    <>
-                      <strong>{a.course.code}</strong>: {a.message}
-                      {a.missingPrereqs && (
-                        <div className="ml-4">
-                          Related courses:
-                          <ul className="ml-2 list-disc">
-                            {a.missingPrereqs.map((c) => (
-                              <li key={c.course_id}>
-                                {c.code} ({c.course_id})
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <span>{a.message}</span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+      {/* Advisories */}
+      <section className="mb-4">
+        <h3 className="text-lg font-medium text-yellow-700">Advisories</h3>
+        {verifyResult.advisory.length === 0 ? (
+          <p className="text-green-700">No advisories!</p>
+        ) : (
+          <ul className="ml-4 list-disc">
+            {verifyResult.advisory.map((a, idx) => (
+              <li key={idx} className="mb-2">
+                {a.message}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
-        {/* Suggested Order */}
-        <section>
-          <h3 className="text-lg font-medium text-blue-700">Suggested Order</h3>
-          {verifyResult.suggestedOrder.length === 0 ? (
-            <p>No suggested order available.</p>
-          ) : (
-            <ol className="ml-4 list-decimal">
-              {verifyResult.suggestedOrder.map((c) => (
-                <li key={c.course_id}>
-                  {c.code} ({c.course_id})
-                </li>
-              ))}
-            </ol>
-          )}
-        </section>
+      {/* Suggested Order */}
+      <section>
+        <h3 className="text-lg font-medium text-blue-700">Suggested Order</h3>
+        {verifyResult.suggestedOrder.length === 0 ? (
+          <p>No suggested order available.</p>
+        ) : (
+          <ol className="ml-4 list-decimal">
+            {verifyResult.suggestedOrder.map((c) => (
+              <li key={c.course_id}>
+                {c.code} ({c.course_id})
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
 
-        {/* Details */}
-        <section className="mt-4 text-sm text-gray-600">
-          <p>Nodes: {verifyResult.details.nodesCount}</p>
-          <p>Edges: {verifyResult.details.edgesCount}</p>
-          <p>Cycle detected: {verifyResult.details.topoHasCycle ? "Yes" : "No"}</p>
-        </section>
-      </div>
-    )}
-  </div>
+      {/* Details */}
+      <section className="mt-4 text-sm text-gray-600">
+        <p>Nodes: {verifyResult.details.nodesCount}</p>
+        <p>Edges: {verifyResult.details.edgesCount}</p>
+        <p>Cycle detected: {verifyResult.details.topoHasCycle ? "Yes" : "No"}</p>
+      </section>
+    </div>
+  )}
+</div>
+
 </div>
 
         </div>
       </div>
+
+      
     </div>
 
     {/* Right panel: Quarter cards */}

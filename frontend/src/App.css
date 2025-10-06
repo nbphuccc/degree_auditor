@@ -382,7 +382,7 @@ html, body, #root {
   display: flex;
   flex-direction: column;
   gap: 0px;
-  width: 300px;        /* ensure panel only as wide as content */
+  width: max-content;        /* ensure panel only as wide as content */
 }
 
 /* Planner controls container — smaller and tighter than .box */
@@ -391,7 +391,7 @@ html, body, #root {
   padding: 8px 12px;           /* tighter padding */
   border-radius: 4px;
   border: 1px solid #ccc;
-  width: max-content;           /* shrink to fit content */
+  width: 300px;           /* shrink to fit content */
   display: flex;
   flex-direction: column;
   gap: 8px;
