@@ -7,8 +7,11 @@ import type {RemainingStandaloneRequirement, PlannerScheduleItem, PrerequisiteGr
    CourseMeta, Violation, Advisory, VerifyPlannerResponse } from "@shared/types";
 
 const app = express();
-app.use(cors({
-origin: "https://degree-auditor-frontend.onrender.com"}));
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL || "http://localhost:5173", // dev fallback
+  })
+);
 app.use(express.json());
 
 // Open SQLite database
