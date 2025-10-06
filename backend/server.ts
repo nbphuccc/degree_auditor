@@ -3,7 +3,8 @@ import cors from "cors";
 import sqlite3 from "sqlite3";
 import { open } from "sqlite";
 import path from "path";
-import type {RemainingStandaloneRequirement, PlannerScheduleItem, PrerequisiteGroupRow, PrerequisiteGroupCourseRow, CourseMeta, Violation, Advisory, VerifyPlannerResponse } from "@shared/types";
+import type {RemainingStandaloneRequirement, PlannerScheduleItem, PrerequisiteGroupRow, PrerequisiteGroupCourseRow,
+   CourseMeta, Violation, Advisory, VerifyPlannerResponse } from "@shared/types";
 
 const app = express();
 app.use(cors({
@@ -542,7 +543,12 @@ function computeMissingPrereqs(
 
 app.post("/api/verify-planner", async (req, res) => {
   try {
-    const { schedule, remainingStandaloneCourses } = req.body || {};
+    const { schedule, remainingStandaloneCourses }: {
+      schedule: PlannerScheduleItem[];
+      remainingStandaloneCourses: RemainingStandaloneRequirement[];
+    } = req.body || {};
+
+    const remainingSet = new Set<string>((remainingStandaloneCourses || []).map((c) => c.course_id));
 
     const availMap = new Map<string, RemainingStandaloneRequirement>();
     for (const c of remainingStandaloneCourses || []) {
@@ -620,11 +626,10 @@ app.post("/api/verify-planner", async (req, res) => {
     // ------------------------
     const { sorted: topoSortedIds, hasCycle } = topologicalSort(nodesSet, edges);
 
-    const suggestedOrder: RemainingStandaloneRequirement[] = topoSortedIds.map((id) => {
-      if (availMap.has(id)) return availMap.get(id)!;
-      if (courseMetaMap.has(id)) return makeRemainingStandalone(id, courseMetaMap.get(id)!);
-      return makeRemainingStandalone(id, id, "");
-    });
+    const suggestedOrder: RemainingStandaloneRequirement[] = topoSortedIds
+  .filter(id => remainingSet.has(id))  // exclude courses not part of remaining requirements
+  .map((id) => availMap.get(id)!);
+
 
     // ------------------------
     // violations & advisory
@@ -663,13 +668,26 @@ app.post("/api/verify-planner", async (req, res) => {
       }
 
       const missingSet = computeMissingPrereqs(cId, prereqMap, scheduledSet, availMap);
-      if (missingSet.length) {
+
+      const missingInRemaining = missingSet.filter(m => remainingSet.has(m.course_id));
+      const missingNotInRemaining = missingSet.filter(m => !remainingSet.has(m.course_id));
+
+      if (missingInRemaining.length) {
         violations.push({
           course: schedItem.course,
           message: `${schedItem.course.code} missing prerequisites`,
-          missingPrereqs: missingSet,
+          missingPrereqs: missingInRemaining,
         });
       }
+
+      if (missingNotInRemaining.length) {
+        const missingCodes = missingNotInRemaining.map(m => m.code).join(", ");
+        advisory.push({
+          course: schedItem.course,
+          message: `Make sure you have taken ${missingCodes} for ${schedItem.course.code}`,
+        });
+      }
+
 
       const availTokens = splitAvailability(availMap.get(cId)?.availability ?? "");
       if (availTokens.length && !availTokens.includes(termName.toLowerCase())) {
