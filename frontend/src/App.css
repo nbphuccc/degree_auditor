@@ -489,6 +489,7 @@ html, body, #root {
   border-radius: 10px;
   padding: 1rem 1.5rem;
   box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+  color: #000;
 }
 
 /* Section Headers */
@@ -538,17 +539,6 @@ html, body, #root {
 
 .text-yellow-700 {
   color: #b45309;
-}
-
-/* Small textboxes */
-.small-textbox {
-  width: 100px;
-  padding: 0.35rem 0.5rem;
-  border-radius: 5px;
-  border: 1px solid #ccc;
-  font-size: 0.95rem;
-  color: #000;
-  background-color: #fff;
 }
 
 
