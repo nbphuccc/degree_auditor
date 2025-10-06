@@ -650,17 +650,20 @@ app.post("/api/verify-planner", async (req, res) => {
   const termIndex = scheduledMap.get(courseId)!.termIndex;
   const prereqs = prereqMap.get(courseId) || [];
 
-  for (const prereqId of prereqs) {
+    for (const prereqId of prereqs) {
     if (scheduledMap.has(prereqId)) {
       const prereqTerm = scheduledMap.get(prereqId)!.termIndex;
       if (prereqTerm >= termIndex) {
+        const course = scheduledMap.get(courseId)!.course;
+        const prereqCode = availMap.get(prereqId)?.code ?? courseMetaMap.get(prereqId) ?? prereqId;
         violations.push({
-          course: scheduledMap.get(courseId)!.course,
-          message: `${scheduledMap.get(courseId)!.course.code} is scheduled before its prerequisite ${prereqId}`,
+          course,
+          message: `${course.code} is scheduled before its prerequisite ${prereqCode}`,
         });
       }
     }
   }
+
 }
 
     for (const schedItem of schedule || []) {
@@ -714,6 +717,7 @@ app.post("/api/verify-planner", async (req, res) => {
         }
       }
 
+      /*
       const missingSet = computeMissingPrereqs(cId, prereqMap, scheduledSet, availMap);
       console.log("[VerifyPlanner DEBUG] remainingSet:", Array.from(remainingSet));
       console.log("[VerifyPlanner DEBUG] missingSet:", Array.from(missingSet));
@@ -739,6 +743,7 @@ app.post("/api/verify-planner", async (req, res) => {
           message: `Make sure you have taken ${missingCodes} for ${schedItem.course.code}`,
         });
       }
+        */
 
 
       const availTokens = splitAvailability(availMap.get(cId)?.availability ?? "");
