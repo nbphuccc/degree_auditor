@@ -1021,102 +1021,8 @@ const handlePlannerGroupInputBlur = async (
               &nbsp;Skip Summer
             </label>
           </div>
-        </div>
-      </div>
-    </div>
 
-    {/* Right panel: Quarter cards */}
-    <div className="quarters-panel">
-      {selectedQuarter && plannerYear && (
-        <div className="planner-quarters">
-          {plannerQuarters.map((q, qIdx) => (
-            <div key={`${q.name}-${q.year}`} className="quarter-card box">
-              <h3>{q.name} {q.year}</h3>
-
-              {!q.isPlaceholder && (
-                <div className="quarter-slots">
-                  {q.slots.map((slot, sIdx) => (
-                    <div
-  key={sIdx}
-  className="quarter-slot"
-  onDragOver={(e) => e.preventDefault()}
-  onDrop={(e) => handleDropCourse(qIdx, sIdx, e)}
->
-  {slot.course ? (
-    <div
-      className="slot-course-wrapper"
-      draggable
-      onDragStart={(e) => handleDragStart(e, slot.course!, qIdx, sIdx)}
-    >
-      <span className="slot-course">
-        {"course_id" in slot.course
-          ? slot.course.code
-          : slot.course.description}
-      </span>
-
-      <div className="slot-controls">
-        {"availability" in slot.course && slot.course.availability && (
-          <span className="term-container">
-            {slot.course.availability.split(", ").map((term) => (
-              <span key={term} className={`term-badge ${term.toLowerCase()}`}>
-                {term}
-              </span>
-            ))}
-          </span>
-        )}
-        <button
-          className="remove-btn"
-          onClick={() => handleRemoveCourse(qIdx, sIdx)}
-        >
-          –
-        </button>
-
-        {"group_id" in slot.course && (
-  <div className="group-input">
-    <input
-      type="text"
-      placeholder="Enter course code"
-      defaultValue={slot.chosenCourse?.code ?? ""}
-      onBlur={(e) =>
-        handlePlannerGroupInputBlur(qIdx, sIdx, slot.course as RemainingGroupRequirement, e.target.value)
-      }
-      className="group-course-textbox"
-    />
-    {plannerGroupErrors.has(getGroupKey(slot.course)) && (
-      <div className="error-text">
-        {plannerGroupErrors.get(getGroupKey(slot.course))}
-      </div>
-    )}
-  </div>
-)}
-
-      </div>
-    </div>
-  ) : (
-    <span className="slot-placeholder">Drag a course here</span>
-  )}
-</div>
-
-
-                    
-                  ))}
-                </div>
-              )}
-
-              {q.isPlaceholder && (
-                <button onClick={() => addSummerQuarter(q.year)}>Add Summer</button>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="quarter-add-button">
-        <button onClick={addNextQuarter}>Add Next Quarter</button>
-      </div>
-    </div>
-
-    <div className="planner-verifier mt-4">
+          <div className="planner-verifier mt-4">
   {/* Verify Planner Button */}
   <button
     onClick={handleVerifier}
@@ -1227,9 +1133,100 @@ const handlePlannerGroupInputBlur = async (
   </div>
 </div>
 
-    
+        </div>
+      </div>
+    </div>
 
-    
+    {/* Right panel: Quarter cards */}
+    <div className="quarters-panel">
+      {selectedQuarter && plannerYear && (
+        <div className="planner-quarters">
+          {plannerQuarters.map((q, qIdx) => (
+            <div key={`${q.name}-${q.year}`} className="quarter-card box">
+              <h3>{q.name} {q.year}</h3>
+
+              {!q.isPlaceholder && (
+                <div className="quarter-slots">
+                  {q.slots.map((slot, sIdx) => (
+                    <div
+  key={sIdx}
+  className="quarter-slot"
+  onDragOver={(e) => e.preventDefault()}
+  onDrop={(e) => handleDropCourse(qIdx, sIdx, e)}
+>
+  {slot.course ? (
+    <div
+      className="slot-course-wrapper"
+      draggable
+      onDragStart={(e) => handleDragStart(e, slot.course!, qIdx, sIdx)}
+    >
+      <span className="slot-course">
+        {"course_id" in slot.course
+          ? slot.course.code
+          : slot.course.description}
+      </span>
+
+      <div className="slot-controls">
+        {"availability" in slot.course && slot.course.availability && (
+          <span className="term-container">
+            {slot.course.availability.split(", ").map((term) => (
+              <span key={term} className={`term-badge ${term.toLowerCase()}`}>
+                {term}
+              </span>
+            ))}
+          </span>
+        )}
+        <button
+          className="remove-btn"
+          onClick={() => handleRemoveCourse(qIdx, sIdx)}
+        >
+          –
+        </button>
+
+        {"group_id" in slot.course && (
+  <div className="group-input">
+    <input
+      type="text"
+      placeholder="Enter course code"
+      defaultValue={slot.chosenCourse?.code ?? ""}
+      onBlur={(e) =>
+        handlePlannerGroupInputBlur(qIdx, sIdx, slot.course as RemainingGroupRequirement, e.target.value)
+      }
+      className="group-course-textbox"
+    />
+    {plannerGroupErrors.has(getGroupKey(slot.course)) && (
+      <div className="error-text">
+        {plannerGroupErrors.get(getGroupKey(slot.course))}
+      </div>
+    )}
+  </div>
+)}
+
+      </div>
+    </div>
+  ) : (
+    <span className="slot-placeholder">Drag a course here</span>
+  )}
+</div>
+
+
+                    
+                  ))}
+                </div>
+              )}
+
+              {q.isPlaceholder && (
+                <button onClick={() => addSummerQuarter(q.year)}>Add Summer</button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="quarter-add-button">
+        <button onClick={addNextQuarter}>Add Next Quarter</button>
+      </div>
+    </div>
   </div>
     </>
   )}
