@@ -9,7 +9,6 @@ const app = express();
 app.use(cors({
 origin: "https://degree-auditor-frontend.onrender.com"}));
 app.use(express.json());
-app.use(express.static(path.join(__dirname, "../../frontend/dist")));
 
 // Open SQLite database
 async function openDb() {
@@ -707,10 +706,6 @@ app.post("/api/verify-planner", async (req, res) => {
     console.error("Verify Planner error", err);
     res.status(500).json({ error: err.message ?? String(err) });
   }
-});
-
-app.get(/^\/.*$/, (req, res) => {
-  res.sendFile(path.join(__dirname, "../../frontend/dist/index.html"));
 });
 
 // -----------------------
