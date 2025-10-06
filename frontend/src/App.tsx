@@ -1085,18 +1085,11 @@ const handlePlannerGroupInputBlur = async (
           <ol className="ml-4 list-decimal">
             {verifyResult.suggestedOrder.map((c) => (
               <li key={c.course_id}>
-                {c.code} ({c.course_id})
+                {c.code}
               </li>
             ))}
           </ol>
         )}
-      </section>
-
-      {/* Details */}
-      <section className="mt-4 text-sm text-gray-600">
-        <p>Nodes: {verifyResult.details.nodesCount}</p>
-        <p>Edges: {verifyResult.details.edgesCount}</p>
-        <p>Cycle detected: {verifyResult.details.topoHasCycle ? "Yes" : "No"}</p>
       </section>
     </div>
   )}
