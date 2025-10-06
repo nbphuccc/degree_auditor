@@ -2,16 +2,16 @@
 export type College = { college_id: number; name: string; abbreviation: string | null };
 export type PathwayName = { name: string };
 export type Degree = { degree_id: number; code: string | null; name: string };
+export type TakenCourse = StandaloneRequirement & { associatedKey?: string }; // associatedKey is optional — present only for group requirements
 export type GroupRequirement = {group_id: number; description: string, group_instance: string}
 export type StandaloneRequirement = {course_id: string; code: string}
-export type TakenCourse = StandaloneRequirement & { associatedKey?: string }; // associatedKey is optional — present only for group requirements
 export type RemainingGroupRequirement = GroupRequirement & {availability: string};
 export type RemainingStandaloneRequirement = StandaloneRequirement & {availability: string}
 // Planner slot type
 export type PlannerSlot = {
   course?: RemainingStandaloneRequirement | RemainingGroupRequirement;
   groupKey?: string; // used only for groups
-  chosenCourse?: StandaloneRequirement // chosen course in the group
+  chosenCourse?: RemainingStandaloneRequirement // chosen course in the group
 };
 // Quarter type
 export type Quarter = {
@@ -22,21 +22,21 @@ export type Quarter = {
 };
 
 export type Violation = {
-  course_id: string; // dependent course that has violation
+  course: RemainingStandaloneRequirement; // dependent course that has violation
   message: string; // description of violation
-  missingPrereqs?: string[]; // prereq ids missing / scheduled too late
+  missingPrereqs?: RemainingStandaloneRequirement[]; // prereqs missing / scheduled too late
 };
 
 export type Advisory = {
-  course_id?: string;
+  course?: RemainingStandaloneRequirement;
   message: string;
-    missingPrereqs?: string[];
+    missingPrereqs?: RemainingStandaloneRequirement[];
 };
 
 export type VerifyPlannerResponse = {
   violations: Violation[];
   advisory: Advisory[];
-  suggestedOrder: string[]; // topologically sorted list of course codes
+  suggestedOrder: RemainingStandaloneRequirement[]; // topologically sorted list of courses
   details: {
     nodesCount: number;
     edgesCount: number;
@@ -44,14 +44,24 @@ export type VerifyPlannerResponse = {
   };
 };
 
-export type MemberInfo = {
-  scheduledTerm: number | null;
-  id: string;
+export type PlannerScheduleItem = {
+  course: RemainingStandaloneRequirement;
+  termIndex: number;
+  termName: "Fall" | "Winter" | "Spring" | "Summer";
 };
 
-export type GroupWithMembers = {
+export type PrerequisiteGroupRow = {
   group_id: number;
-  course_id: string | null;
+  course_id: string; // dependent
   min_courses: number;
-  members: string[];
+};
+
+export type PrerequisiteGroupCourseRow = {
+  group_id: number;
+  prereq_id: string;
+};
+
+export type CourseMeta = {
+  course_id: string;
+  code: string;
 };

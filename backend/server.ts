@@ -3,7 +3,7 @@ import cors from "cors";
 import sqlite3 from "sqlite3";
 import { open } from "sqlite";
 import path from "path";
-import type { MemberInfo, GroupWithMembers } from "@shared/types";
+import type {RemainingStandaloneRequirement, PlannerScheduleItem, PrerequisiteGroupRow, PrerequisiteGroupCourseRow, CourseMeta, Violation, Advisory, VerifyPlannerResponse } from "@shared/types";
 
 const app = express();
 app.use(cors({
@@ -466,274 +466,246 @@ app.post("/api/group-term-courses", async (req, res) => {
   }
 });
 
-function topoSort(nodes: string[], edges: [string, string][]) {
-  // nodes: array of node ids
-  // edges: array of [from,to]
-  const adj = new Map();
-  const indeg = new Map();
-  for (const n of nodes) {
-    adj.set(n, []);
-    indeg.set(n, 0);
-  }
-  for (const [u, v] of edges) {
-    if (!adj.has(u)) adj.set(u, []);
-    if (!adj.has(v)) adj.set(v, []);
-    adj.get(u).push(v);
-    indeg.set(v, (indeg.get(v) || 0) + 1);
-    if (!indeg.has(u)) indeg.set(u, indeg.get(u) || 0);
-  }
-  // Kahn's algorithm
-  const q = [];
-  for (const [n, d] of indeg.entries()) {
-    if (d === 0) q.push(n);
-  }
-  const order = [];
-  while (q.length) {
-    const n: string = q.shift();
-    order.push(n);
-    const neighbors = adj.get(n) || [];
-    for (const m of neighbors) {
-      indeg.set(m, indeg.get(m) - 1);
-      if (indeg.get(m) === 0) q.push(m);
+function splitAvailability(avail: string | undefined): string[] {
+  if (!avail) return [];
+  return avail.split(",").map((t) => t.trim().toLowerCase());
+}
+
+function makeRemainingStandalone(
+  course_id: string,
+  code: string,
+  availability?: string
+): RemainingStandaloneRequirement {
+  return { course_id, code, availability: availability ?? "" };
+}
+
+function topologicalSort(
+  nodes: Set<string>,
+  edges: [string, string][]
+): { sorted: string[]; hasCycle: boolean } {
+  const inDegree = new Map<string, number>();
+  nodes.forEach((n) => inDegree.set(n, 0));
+  edges.forEach(([from, to]) => {
+    if (nodes.has(from) && nodes.has(to)) {
+      inDegree.set(to, (inDegree.get(to) ?? 0) + 1);
+    }
+  });
+
+  const queue: string[] = [];
+  for (const [n, deg] of inDegree.entries()) if (deg === 0) queue.push(n);
+
+  const sorted: string[] = [];
+  while (queue.length) {
+    const n = queue.shift()!;
+    sorted.push(n);
+    for (const [from, to] of edges) {
+      if (from === n && nodes.has(to)) {
+        inDegree.set(to, (inDegree.get(to) ?? 0) - 1);
+        if (inDegree.get(to) === 0) queue.push(to);
+      }
     }
   }
-  // If all nodes in order => no cycle
-  const hasCycle = order.length !== adj.size;
-  return { order, hasCycle };
+
+  return { sorted, hasCycle: sorted.length !== nodes.size };
 }
 
-// Helper: get course codes (map course_id -> code)
-async function loadCourseCodes() {
-  const db = await openDb();
-  const rows: { course_id: string; code: string }[] = await db.all(
-  `SELECT course_id, code FROM Course`
-);
-  const map = new Map<string, string>(
-    rows.map(r => [r.course_id, r.code ?? r.course_id])
-  );
-  return map;
+function computeMissingPrereqs(
+  course_id: string,
+  prereqMap: Map<string, string[]>,
+  scheduledSet: Set<string>,
+  availMap: Map<string, RemainingStandaloneRequirement>,
+  visited: Set<string> = new Set()
+): RemainingStandaloneRequirement[] {
+  const result: RemainingStandaloneRequirement[] = [];
+  if (visited.has(course_id)) return result;
+  visited.add(course_id);
+
+  const prereqs = prereqMap.get(course_id) ?? [];
+  for (const p of prereqs) {
+    if (!scheduledSet.has(p) && availMap.has(p)) {
+      const r = availMap.get(p)!;
+      result.push(r);
+      const upstream = computeMissingPrereqs(p, prereqMap, scheduledSet, availMap, visited);
+      result.push(...upstream);
+    }
+  }
+  const seen = new Set<string>();
+  return result.filter((x) => {
+    if (seen.has(x.course_id)) return false;
+    seen.add(x.course_id);
+    return true;
+  });
 }
 
+// ==========================
+// Route implementation
+// ==========================
 
-
-/**
- * POST /api/verify-planner
- * body:
- * {
- *   schedule: [{ course_id: string, termIndex: number }],
- *   remainingStandaloneCourseIds: string[]   // from frontend
- * }
- *
- * Response:
- * { violations: Violation[], advisory: Advisory[], suggestedOrder?: string[], details?: any }
- */
 app.post("/api/verify-planner", async (req, res) => {
-  
   try {
-    const { schedule, remainingStandaloneCourseIds } = req.body || {};
+    const { schedule, remainingStandaloneCourses } = req.body || {};
 
-    if (!Array.isArray(schedule)) {
-      return res.status(400).json({ error: "Missing or invalid 'schedule' in request body." });
-    }
-    if (!Array.isArray(remainingStandaloneCourseIds)) {
-      return res.status(400).json({ error: "Missing or invalid 'remainingStandaloneCourseIds' in request body." });
+    const availMap = new Map<string, RemainingStandaloneRequirement>();
+    for (const c of remainingStandaloneCourses || []) {
+      availMap.set(c.course_id, c);
     }
 
-    // 1) Load prerequisite groups and group members
-    // PrerequisiteGroup: group_id, course_id (dependent), min_courses
-    // PrerequisiteGroupCourse: group_id, prereq_id
+    const scheduledSet = new Set<string>((schedule || []).map((s: PlannerScheduleItem) => s.course.course_id));
+    const scheduledMap = new Map<string, PlannerScheduleItem>((schedule || []).map((s: PlannerScheduleItem) => [s.course.course_id, s]));
+
+    const allScheduledIds = Array.from(scheduledSet);
+
     const db = await openDb();
 
-const groups = await db.all<{
-  group_id: number;
-  course_id: string;
-  min_courses: number;
-}[]>(`SELECT group_id, course_id, min_courses FROM PrerequisiteGroup`);
+    // ------------------------
+    // fetch prerequisite groups
+    // ------------------------
+    const prereqGroups: PrerequisiteGroupRow[] = await db.all(
+      `SELECT group_id, course_id, min_courses FROM PrerequisiteGroup WHERE course_id IN (${allScheduledIds
+        .map(() => "?")
+        .join(",")})`,
+      allScheduledIds
+    );
 
+    const prereqGroupMap = new Map<string, { group_id: number; min_courses: number; members: string[] }>();
+    const groupIds = prereqGroups.map((g) => g.group_id);
+    const prereqGroupCourses: PrerequisiteGroupCourseRow[] = groupIds.length
+      ? await db.all(
+          `SELECT group_id, prereq_id FROM PrerequisiteGroupCourse WHERE group_id IN (${groupIds
+            .map(() => "?")
+            .join(",")})`,
+          groupIds
+        )
+      : [];
 
-const groupMembersRows: { group_id: number; prereq_id: string }[] = await db.all(`
-  SELECT group_id, prereq_id FROM PrerequisiteGroupCourse `);
-
-    // Map group_id -> { course_id, min_courses, members: [] }
-    const groupsById = new Map<number, GroupWithMembers>();
-    for (const g of groups) {
-      groupsById.set(g.group_id, { group_id: g.group_id, course_id: g.course_id, min_courses: g.min_courses || 1, members: [] });
+    for (const g of prereqGroups) {
+      const members = prereqGroupCourses.filter((c) => c.group_id === g.group_id).map((c) => c.prereq_id);
+      prereqGroupMap.set(g.course_id, { group_id: g.group_id, min_courses: g.min_courses, members });
     }
-    for (const r of groupMembersRows) {
-      const g = groupsById.get(r.group_id);
-      if (g) g.members.push(r.prereq_id);
-      else {
-        // orphan group member? ignore or create entry
-        groupsById.set(r.group_id, { group_id: r.group_id, course_id: null, min_courses: 1, members: [r.prereq_id] });
+
+    // ------------------------
+    // fetch course metadata
+    // ------------------------
+    const allCourseIds = new Set<string>();
+    allScheduledIds.forEach((id) => allCourseIds.add(id));
+    prereqGroupCourses.forEach((c) => allCourseIds.add(c.prereq_id));
+    const courseMetaRows: CourseMeta[] = allCourseIds.size
+      ? await db.all(
+          `SELECT course_id, code FROM Course WHERE course_id IN (${Array.from(allCourseIds)
+            .map(() => "?")
+            .join(",")})`,
+          Array.from(allCourseIds)
+        )
+      : [];
+    const courseMetaMap = new Map(courseMetaRows.map((c) => [c.course_id, c.code]));
+
+    // ------------------------
+    // build nodes & edges
+    // ------------------------
+    const nodesSet = new Set<string>(allScheduledIds);
+    const prereqMap = new Map<string, string[]>();
+    for (const [dependent, grp] of prereqGroupMap.entries()) {
+      for (const member of grp.members) {
+        if (!nodesSet.has(member) && availMap.has(member)) nodesSet.add(member);
       }
+      prereqMap.set(dependent, grp.members);
     }
 
-    // 2) Build nodes and edges for DAG (edges: prereq -> dependent)
-    // Collect all unique course_ids appearing in groups or group members
-    const nodeSet: Set<string> = new Set();
-    const edges: [string, string][] = []; // correct type for topoSort
-    for (const [, g] of groupsById) {
-      const to = g.course_id;
-      if (to) nodeSet.add(to);
-      for (const prereq of g.members) {
-        nodeSet.add(prereq);
-        if (to) edges.push([prereq, to]);
-      }
+    const edges: [string, string][] = [];
+    for (const [dependent, members] of prereqMap.entries()) {
+      members.forEach((p) => edges.push([p, dependent]));
     }
 
-    // 3) Topological sort across these nodes
-    const nodes = Array.from(nodeSet);
-    const { order: topoOrder, hasCycle } = topoSort(nodes, edges);
+    // ------------------------
+    // topological sort
+    // ------------------------
+    const { sorted: topoSortedIds, hasCycle } = topologicalSort(nodesSet, edges);
 
-    // load course codes to show labels in advisory
-    const courseCodes = await loadCourseCodes();
+    const suggestedOrder: RemainingStandaloneRequirement[] = topoSortedIds.map((id) => {
+      if (availMap.has(id)) return availMap.get(id)!;
+      if (courseMetaMap.has(id)) return makeRemainingStandalone(id, courseMetaMap.get(id)!);
+      return makeRemainingStandalone(id, id, "");
+    });
 
-    // 4) Build quick lookup for schedule: course_id -> termIndex
-    const scheduleMap = new Map();
-    for (const item of schedule) {
-      scheduleMap.set(item.course_id, item.termIndex);
-    }
+    // ------------------------
+    // violations & advisory
+    // ------------------------
+    const violations: Violation[] = [];
+    const advisory: Advisory[] = [];
 
-    // 5) Verification rules:
-    // For each group G (with dependent = course_id)
-    //   - If dependent not scheduled, skip verification for that dependent
-    //   - Otherwise check how many of group's members are scheduled at termIndex < dependent's termIndex
-    //     - if count < min_courses:
-    //         - for each missing prereq p in group.members:
-    //             - if p is present in remainingStandaloneCourseIds but not scheduled => VIOLATION (missing prereq but available)
-    //             - if p is not in remainingStandaloneCourseIds and not scheduled => ADVISORY (prereq missing and not available)
-    //         - record violation (with missingPrereqs list and message)
-    //
-    // Also check for scheduled prerequisites that appear in schedule but scheduled in same/later quarter than dependent -> VIOLATION
+    for (const schedItem of schedule || []) {
+      const cId = schedItem.course.course_id;
+      const termIndex = schedItem.termIndex;
+      const termName = schedItem.termName;
 
-    const violations = [];
-    const advisory = [];
+      const grp = prereqGroupMap.get(cId);
+      if (grp) {
+        const satisfiedInGroup = grp.members.filter(
+          (m) => scheduledMap.has(m) && scheduledMap.get(m)!.termIndex < termIndex
+        ).length;
 
-    // for quick membership:
-    const remainingStandaloneSet = new Set(remainingStandaloneCourseIds);
-
-    // Helper to add advisory item listing missing prereq course codes
-    function pushAdvisoryForMissingPrs(missingIds: string[], dependentCourseId: string) {
-      if (!missingIds || missingIds.length === 0) return;
-      const codes = missingIds.map(id => courseCodes.get(id) ?? id);
-      advisory.push({
-        course_id: dependentCourseId,
-        message: `Prerequisite(s) not planned and not available in remainingStandalone: ${codes.join(", ")}`
-      });
-    }
-
-    // Iterate groups
-    for (const [, g] of groupsById) {
-      const dependent = g.course_id;
-      if (!dependent) continue; // skip malformed
-
-      // Produce advisories/violations for prereqs relative to group members even if dependent not scheduled.
-      // However, main "violation" about ordering applies only when dependent is scheduled.
-
-      // Count how many group members are scheduled before dependent
-      const dependentTerm = scheduleMap.has(dependent) ? scheduleMap.get(dependent) : null;
-
-      // Determine scheduled status for each member
-      const memberInfo = g.members.map((pr:string) => {
-        const scheduledTerm = scheduleMap.has(pr) ? scheduleMap.get(pr) : null;
-        return { id: pr, scheduledTerm };
-      });
-
-      // If dependent scheduled -> check ordering requirements
-      if (dependentTerm !== null) {
-        // count how many members scheduled strictly earlier than dependentTerm
-        const countEarlier = memberInfo.reduce((acc: number, m: MemberInfo) => acc + (m.scheduledTerm !== null && m.scheduledTerm < dependentTerm ? 1 : 0), 0);
-
-        if (countEarlier < g.min_courses) {
-          // need to determine which prereqs are missing (not scheduled or scheduled too late)
-          const missing = memberInfo
-            .filter((m: MemberInfo) => !(m.scheduledTerm !== null && m.scheduledTerm < dependentTerm))
-            .map((m: MemberInfo) => m.id);
-
-          // classify each missing prereq as violation vs advisory according to remainingStandaloneCourseIds
-          const missingViolations = missing.filter((id: string) => remainingStandaloneSet.has(id));
-          const missingAdvisories = missing.filter((id: string) => !remainingStandaloneSet.has(id));
-
-          if (missingViolations.length > 0) {
-            violations.push({
-              course_id: dependent,
-              message: `Not enough prerequisites from group ${g.group_id} scheduled before ${dependent}. Required ${g.min_courses}, got ${countEarlier}. Missing prerequisites (available): ${missingViolations.join(", ")}`,
-              missingPrereqs: missingViolations,
-            });
-          }
-          if (missingAdvisories.length > 0) {
-            // include course codes if available
-            const codes = missingAdvisories.map((id: string) => courseCodes.get(id) ?? id);
-            advisory.push({
-              course_id: dependent,
-              message: `Prerequisite(s) not planned and not available in remainingStandalone: ${codes.join(", ")}`
-            });
-          }
-        }
-      } else {
-        // Dependent not scheduled — still report missing prereqs as advisory/violation per your rule (helpful to user)
-        const notScheduled = memberInfo.filter((m: MemberInfo) => m.scheduledTerm === null).map((m: MemberInfo) => m.id);
-        const viol = notScheduled.filter((id: string) => remainingStandaloneSet.has(id));
-        const adv = notScheduled.filter((id: string) => !remainingStandaloneSet.has(id));
-        if (viol.length > 0) {
+        if (satisfiedInGroup < grp.min_courses) {
+          const missingMembers = grp.members.filter((m) => availMap.has(m) && !scheduledMap.has(m)).map((m) => availMap.get(m)!);
           violations.push({
-            course_id: dependent,
-            message: `Prerequisite(s) for ${dependent} exist in remainingStandalone but are not scheduled: ${viol.join(", ")}`,
-            missingPrereqs: viol
+            course: schedItem.course,
+            message: `Require ${grp.min_courses} out from these courses: ${grp.members
+              .map((id) => availMap.get(id)?.code ?? courseMetaMap.get(id) ?? id)
+              .join(", ")}`,
+            missingPrereqs: missingMembers.length ? missingMembers : undefined,
           });
         }
-        if (adv.length > 0) {
-          const codes = adv.map((id: string) => courseCodes.get(id) ?? id);
+
+        if (grp.min_courses > grp.members.length) {
           advisory.push({
-            course_id: dependent,
-            message: `Prerequisite(s) for ${dependent} not planned nor available: ${codes.join(", ")}`
+            course: schedItem.course,
+            message: `Database inconsistency: group requires ${grp.min_courses} but only ${grp.members.length} listed`,
           });
         }
       }
 
-      // Additional check: even if group min_courses satisfied, ensure any scheduled prereq appears before dependent
-      // For any member m that is scheduled (has scheduledTerm) but scheduledTerm >= dependentTerm (if dependentTerm exists), it's a violation.
-      if (dependentTerm !== null) {
-        for (const m of memberInfo) {
-          if (m.scheduledTerm !== null && m.scheduledTerm >= dependentTerm) {
-            // Violation: prereq scheduled same or after dependent
-            violations.push({
-              course_id: dependent,
-              message: `Prerequisite ${m.id} is scheduled in the same or later term than ${dependent}. It must be scheduled earlier.`,
-              missingPrereqs: [m.id]
-            });
-          }
-        }
+      const missingSet = computeMissingPrereqs(cId, prereqMap, scheduledSet, availMap);
+      if (missingSet.length) {
+        violations.push({
+          course: schedItem.course,
+          message: `${schedItem.course.code} missing prerequisites`,
+          missingPrereqs: missingSet,
+        });
+      }
+
+      const availTokens = splitAvailability(availMap.get(cId)?.availability ?? "");
+      if (availTokens.length && !availTokens.includes(termName.toLowerCase())) {
+        advisory.push({
+          course: schedItem.course,
+          message: `This ${schedItem.course.code} is not scheduled on ${termName}`,
+        });
+      } else if (!availTokens.length) {
+        advisory.push({
+          course: schedItem.course,
+          message: `This ${schedItem.course.code} might not be offered here`,
+        });
       }
     }
 
-    // 6) Also check for prerequisites not attached to groups (if you have other individual prereq edges)
-    // For now, schema implies prerequisites are encoded via groups, so the above covers edges.
-
-    // 7) Add topological info: if cycle present, return advisory/violation
     if (hasCycle) {
-      advisory.push({
-        message: `Prerequisite graph contains a cycle (circular prerequisites). Topological sort not possible.`
-      });
+      const cycleCodes = topoSortedIds.map((id) => availMap.get(id)?.code ?? courseMetaMap.get(id) ?? id).join(", ");
+      advisory.push({ message: `Database inconsistency, circular prerequisite group: ${cycleCodes}` });
     }
 
-    // also include suggested topological order of known nodes (helps user)
-    const suggestedOrder = topoOrder; // array of course_ids in topological order for the subgraph
-
-    // Return structured result
-    return res.json({
+    const response: VerifyPlannerResponse = {
       violations,
       advisory,
       suggestedOrder,
       details: {
-        nodesCount: nodes.length,
-        edgesCount: edges.length,
-        topoHasCycle: hasCycle
-      }
-    });
-  } catch (err) {
-    console.error("Error in /api/verify-planner:", err);
-    return res.status(500).json({ error: String(err) });
+        nodesCount: nodesSet.size,
+        edgesCount: edges.filter(([u, v]) => nodesSet.has(u) && nodesSet.has(v)).length,
+        topoHasCycle: hasCycle,
+      },
+    };
+
+    res.json(response);
+  } catch (err: any) {
+    console.error("Verify Planner error", err);
+    res.status(500).json({ error: err.message ?? String(err) });
   }
 });
 

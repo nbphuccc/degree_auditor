@@ -38,9 +38,6 @@ export default function App() {
   const [verifyLoading, setVerifyLoading] = useState(false);
   const [verifyError, setVerifyError] = useState<string | null>(null);
 
-
-
-
   const [warmingUp, setWarmingUp] = useState(true);
 
   // Order of quarters
@@ -63,27 +60,27 @@ const canVerify = useMemo(() => {
 }, [plannerQuarters]);
 
 function buildScheduleFromPlannerQuarters() {
-  // Map quarter name to cycle index so we can compute chronological order if necessary.
+  // Map quarter name to cycle index to compute chronological order if necessary.
   // But simplest: assign increasing termIndex by iterating plannerQuarters in array order.
-  const schedule: { course_id: string; termIndex: number }[] = [];
+  const schedule: { course: RemainingStandaloneRequirement; termIndex: number; termName: string }[] = [];
 
   // assign termIndex by quarter position (all slots in same quarter share same termIndex)
   for (let qIndex = 0; qIndex < plannerQuarters.length; qIndex++) {
     const quarter = plannerQuarters[qIndex];
     const termIndex = qIndex; // 0-based index by quarter order (preserves chronological order)
+    const termName = quarter.name;
     for (const slot of quarter.slots) {
       if (!slot.course) continue;
 
       if ("course_id" in slot.course) {
         // standalone course
-        schedule.push({ course_id: slot.course.course_id, termIndex });
+        schedule.push({ course: slot.course, termIndex, termName });
       } else {
         // group; use chosenCourse (frontend ensures chosenCourse exists before enabling Verify)
-        if (slot.chosenCourse && slot.chosenCourse.course_id) {
-          schedule.push({ course_id: slot.chosenCourse.course_id, termIndex });
+        if (slot.chosenCourse) {
+          schedule.push({ course: slot.chosenCourse, termIndex, termName });
         } else {
-          // This should not happen due to canVerify guarding button; but skip defensively.
-          // We do not include group slots with no chosenCourse.
+          // Do not include group slots with no chosenCourse.
         }
       }
     }
@@ -92,11 +89,7 @@ function buildScheduleFromPlannerQuarters() {
   return schedule;
 }
 
-function getRemainingStandaloneCourseIds() {
-  return remainingStandaloneAvailabilities.map((r) => r.course_id);
-}
-
-async function handleVerifyPlanner() {
+const handleVerifier = async () => {
   // guard
   if (!canVerify) return;
 
@@ -106,15 +99,11 @@ async function handleVerifyPlanner() {
 
   try {
     const schedule = buildScheduleFromPlannerQuarters();
-    const remainingStandaloneCourseIds = getRemainingStandaloneCourseIds();
 
     const payload = {
-      schedule, // [{course_id, termIndex}, ...]
-      remainingStandaloneCourseIds, // for backend to determine advisory vs violation per your rule
+      schedule, // [{courses, termIndex}, ...]
+      remainingStandaloneCourses: remainingStandaloneAvailabilities, // for backend to determine advisory vs violation per your rule
     };
-
-    console.log("HANDLER")
-    // Replace endpoint with server route you will implement.
     const res = await fetch(`${BASE_URL}/api/verify-planner`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -137,7 +126,6 @@ async function handleVerifyPlanner() {
   }
 }
 
-  
   // --- Generate quarters dynamically ---
   useEffect(() => {
   if (!selectedQuarter || !plannerYear) return;
@@ -566,7 +554,6 @@ const handleDragStart = (
   );
 };
 
-
 const handleDropCourse = (targetQ: number, targetS: number, e: React.DragEvent<HTMLDivElement>) => {
   const data = e.dataTransfer.getData("dragData");
   if (!data) return;
@@ -598,7 +585,6 @@ const handleDropCourse = (targetQ: number, targetS: number, e: React.DragEvent<H
     }
   }
 };
-
 
 const handleRemoveCourse = (qIdx: number, sIdx: number) => {
   const slot = plannerQuarters[qIdx].slots[sIdx];
@@ -655,6 +641,7 @@ const handlePlannerGroupInputBlur = async (
   }
 
   try {
+    // --- First: validate the course for this group ---
     const res = await fetch(
       `${BASE_URL}/api/groups/${group.group_id}/validate-v2?courseCode=${encodeURIComponent(code)}`
     );
@@ -670,33 +657,80 @@ const handlePlannerGroupInputBlur = async (
 
       // --- Check other group slots ---
       const isInOtherGroup = plannerQuarters.some((quarter, q) =>
-        quarter.slots.some((slot, s) =>
-          slot.groupKey &&
-          slot.chosenCourse?.code.toUpperCase() === code.toUpperCase() &&
-          !(q === qIdx && s === sIdx) // not the same slot
+        quarter.slots.some(
+          (slot, s) =>
+            slot.groupKey &&
+            slot.chosenCourse?.code.toUpperCase() === code.toUpperCase() &&
+            !(q === qIdx && s === sIdx)
         )
       );
 
       if (!valid || !course) {
         next.set(key, `${code} is not valid for this group.`);
-      } else if (isInStandalone) {
-        next.set(key, `${code} is already a standalone requirement.`);
-      } else if (isInOtherGroup) {
-        next.set(key, `${code} has already been entered in another group.`);
-      } else {
-        next.delete(key);
-
-        // Store chosen course in planner slot
-        setPlannerQuarters((prev) => {
-          const newPlanner = [...prev];
-          newPlanner[qIdx].slots[sIdx].chosenCourse = course;
-          return newPlanner;
-        });
+        return next;
       }
+
+      if (isInStandalone) {
+        next.set(key, `${code} is already a standalone requirement.`);
+        return next;
+      }
+
+      if (isInOtherGroup) {
+        next.set(key, `${code} has already been entered in another group.`);
+        return next;
+      }
+
+      // --- Validation passed ---
+      next.delete(key);
+
+      // --- Fetch availability info ---
+      (async () => {
+        try {
+          const availRes = await fetch(`${BASE_URL}/api/requirements-availability`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              collegeId: selectedCollege,
+              standaloneCourseIds: [course.course_id],
+              groupIds: [],
+            }),
+          });
+
+          const data = await availRes.json();
+          const availability =
+            data?.standalone?.[0]?.availability ?? "";
+
+          // --- Merge course info with availability ---
+          const enrichedCourse: RemainingStandaloneRequirement = {
+            ...course,
+            availability,
+          };
+
+          // --- Update planner with enriched course ---
+          setPlannerQuarters((prev) => {
+            const newPlanner = [...prev];
+            const slot = newPlanner[qIdx].slots[sIdx];
+            // Type guard for sanity
+            if (slot && "group_id" in group) {
+              slot.chosenCourse = enrichedCourse;
+            }
+            console.log(enrichedCourse.availability);
+            return newPlanner;
+          });
+        } catch (err) {
+          console.error("Error fetching availability:", err);
+          setPlannerGroupErrors((prev) => {
+            const next = new Map(prev);
+            next.set(key, "Could not fetch course availability.");
+            return next;
+          });
+        }
+      })();
 
       return next;
     });
-  } catch {
+  } catch (err) {
+    console.error("Error validating course:", err);
     setPlannerGroupErrors((prev) => {
       const next = new Map(prev);
       next.set(key, "Validation failed (network error).");
@@ -1082,78 +1116,118 @@ const handlePlannerGroupInputBlur = async (
       </div>
     </div>
 
-    
-    <div style={{ marginTop: 12, width: "100%", display: "flex", flexDirection: "column", gap: 8 }}>
-      <div>
-        <button
-          onClick={handleVerifyPlanner}
-          disabled={!canVerify || verifyLoading}
-          style={{
-            padding: "8px 12px",
-            background: canVerify ? "#007bff" : "#999",
-            color: "white",
-            border: "none",
-            borderRadius: 6,
-            cursor: canVerify ? "pointer" : "not-allowed",
-          }}
-        >
-          {verifyLoading ? "Verifying..." : "Verify Planner"}
-        </button>
-      </div>
+    <div className="planner-verifier mt-4">
+  {/* Verify Planner Button */}
+  <button
+    onClick={handleVerifier}
+    disabled={!canVerify || verifyLoading}
+    className={`px-4 py-2 rounded-md font-semibold text-white ${
+      !canVerify || verifyLoading ? "bg-gray-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"
+    }`}
+  >
+    {verifyLoading ? "Verifying..." : "Verify Planner"}
+  </button>
 
-      {/* Show pre-check error (missing chosenCourse) */}
-      {!canVerify && (
-        <div style={{ color: "#b34700", fontSize: 13 }}>
-          Some group slots are missing a chosen course. Please pick a course for every group slot before verifying.
-        </div>
-      )}
+  {/* Verifier Result Display */}
+  <div className="verifier-section mt-4">
+    {verifyLoading && <p className="text-blue-700">Verifying planner...</p>}
 
-      {/* Show result */}
-      {verifyError && (
-        <div style={{ color: "red", fontSize: 13 }}>
-          Error verifying planner: {verifyError}
-        </div>
-      )}
+    {verifyError && <p className="text-red-700">Error: {verifyError}</p>}
 
-      {verifyResult && (
-        <div style={{ marginTop: 6 }}>
-          <h4 style={{ margin: "6px 0" }}>Verifier Results</h4>
+    {verifyResult && (
+      <div className="verifier-result p-4 bg-gray-50 rounded-md shadow-sm">
+        <h2 className="text-xl font-semibold mb-2">Verifier Results</h2>
 
+        {/* Violations */}
+        <section className="mb-4">
+          <h3 className="text-lg font-medium text-red-700">Violations</h3>
           {verifyResult.violations.length === 0 ? (
-            <div style={{ color: "#1a7f1a" }}>No violations found — planner appears valid.</div>
+            <p className="text-green-700">No violations detected!</p>
           ) : (
-            <div>
-              <div style={{ color: "#b71c1c", fontWeight: 600 }}>{verifyResult.violations.length} violation(s) found:</div>
-              <ul>
-                {verifyResult.violations.map((v, i) => (
-                  <li key={i} style={{ marginBottom: 6 }}>
-                    <strong>{v.course_id}</strong>: {v.message}
-                    {v.missingPrereqs && v.missingPrereqs.length > 0 && (
-                      <div style={{ marginLeft: 8 }}>
-                        Missing prerequisites: {v.missingPrereqs.join(", ")}
-                      </div>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
+            <ul className="ml-4 list-disc">
+              {verifyResult.violations.map((v, idx) => (
+                <li key={idx} className="mb-2">
+                  <strong>{v.course.code}</strong>: {v.message}
+                  {v.missingPrereqs && (
+                    <div className="ml-4">
+                      Missing prerequisites:
+                      <ul className="ml-2 list-disc">
+                        {v.missingPrereqs.map((c) => (
+                          <li key={c.course_id}>
+                            {c.code} ({c.course_id})
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
           )}
+        </section>
 
-          {verifyResult.advisory.length > 0 && (
-            <div style={{ marginTop: 8 }}>
-              <div style={{ color: "#8a6700", fontWeight: 600 }}>Advisories</div>
-              <ul>
-                {verifyResult.advisory.map((a, i) => (
-                  <li key={i} style={{ marginBottom: 6 }}>
-                    {a.course_id ? <strong>{a.course_id}</strong> : null} {a.message}
-                  </li>
-                ))}
-              </ul>
-            </div>
+        {/* Advisories */}
+        <section className="mb-4">
+          <h3 className="text-lg font-medium text-yellow-700">Advisories</h3>
+          {verifyResult.advisory.length === 0 ? (
+            <p className="text-green-700">No advisories!</p>
+          ) : (
+            <ul className="ml-4 list-disc">
+              {verifyResult.advisory.map((a, idx) => (
+                <li key={idx} className="mb-2">
+                  {a.course ? (
+                    <>
+                      <strong>{a.course.code}</strong>: {a.message}
+                      {a.missingPrereqs && (
+                        <div className="ml-4">
+                          Related courses:
+                          <ul className="ml-2 list-disc">
+                            {a.missingPrereqs.map((c) => (
+                              <li key={c.course_id}>
+                                {c.code} ({c.course_id})
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <span>{a.message}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
           )}
-        </div>
-      )}
-    </div>
+        </section>
+
+        {/* Suggested Order */}
+        <section>
+          <h3 className="text-lg font-medium text-blue-700">Suggested Order</h3>
+          {verifyResult.suggestedOrder.length === 0 ? (
+            <p>No suggested order available.</p>
+          ) : (
+            <ol className="ml-4 list-decimal">
+              {verifyResult.suggestedOrder.map((c) => (
+                <li key={c.course_id}>
+                  {c.code} ({c.course_id})
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
+
+        {/* Details */}
+        <section className="mt-4 text-sm text-gray-600">
+          <p>Nodes: {verifyResult.details.nodesCount}</p>
+          <p>Edges: {verifyResult.details.edgesCount}</p>
+          <p>Cycle detected: {verifyResult.details.topoHasCycle ? "Yes" : "No"}</p>
+        </section>
+      </div>
+    )}
+  </div>
+</div>
+
+    
 
     
   </div>
