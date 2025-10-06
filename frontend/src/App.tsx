@@ -1122,7 +1122,7 @@ const handlePlannerGroupInputBlur = async (
     <p className="text-gray-600">No quarters scheduled yet.</p>
   ) : (
     <div className="space-y-4">
-      {plannerQuarters.map((quarter, qIdx) => (
+      {plannerQuarters.map((quarter, _qIdx) => (
         <div key={`${quarter.name}-${quarter.year}`} className="p-2 border rounded-md">
           <h3 className="font-medium">{quarter.name} {quarter.year}</h3>
           {quarter.slots.length === 0 ? (
