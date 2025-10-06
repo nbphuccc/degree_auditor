@@ -651,14 +651,34 @@ app.post("/api/verify-planner", async (req, res) => {
         ).length;
 
         if (satisfiedInGroup < grp.min_courses) {
-          const missingMembers = grp.members.filter((m) => availMap.has(m) && !scheduledMap.has(m)).map((m) => availMap.get(m)!);
-          violations.push({
-            course: schedItem.course,
-            message: `Require ${grp.min_courses} out from these courses: ${grp.members
-              .map((id) => availMap.get(id)?.code ?? courseMetaMap.get(id) ?? id)
-              .join(", ")}`,
-            missingPrereqs: missingMembers.length ? missingMembers : undefined,
-          });
+          // Split group members by remaining vs not remaining
+          const missingMembersInRemaining = grp.members
+            .filter((m) => availMap.has(m) && !scheduledSet.has(m) && remainingSet.has(m));
+
+          const missingMembersNotInRemaining = grp.members
+            .filter((m) => availMap.has(m) && !scheduledSet.has(m) && !remainingSet.has(m));
+
+          // Violation → only for remaining courses
+          if (missingMembersInRemaining.length) {
+            violations.push({
+              course: schedItem.course,
+              message: `Require ${grp.min_courses} out from these courses: ${grp.members
+                .map((id) => availMap.get(id)?.code ?? courseMetaMap.get(id) ?? id)
+                .join(", ")}`,
+              missingPrereqs: missingMembersInRemaining.map(id => availMap.get(id)!),
+            });
+          }
+
+          // Advisory → for missing prereqs not in remainingStandaloneCourses
+          if (missingMembersNotInRemaining.length) {
+            const missingCodes = missingMembersNotInRemaining
+              .map(id => availMap.get(id)?.code ?? courseMetaMap.get(id) ?? id)
+              .join(", ");
+            advisory.push({
+              course: schedItem.course,
+              message: `Make sure you have taken ${missingCodes} for ${schedItem.course.code}`,
+            });
+          }
         }
 
         if (grp.min_courses > grp.members.length) {
