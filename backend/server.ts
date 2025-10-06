@@ -676,6 +676,9 @@ app.post("/api/verify-planner", async (req, res) => {
       const missingInRemaining = missingSet.filter(m => remainingSet.has(m.course_id));
       const missingNotInRemaining = missingSet.filter(m => !remainingSet.has(m.course_id));
 
+      console.log("[VerifyPlanner DEBUG] missingInRemaining:", Array.from(missingInRemaining));
+      console.log("[VerifyPlanner DEBUG] missingNotInRemaining:", Array.from(missingNotInRemaining));
+
       if (missingInRemaining.length) {
         violations.push({
           course: schedItem.course,
