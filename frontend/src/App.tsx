@@ -569,15 +569,18 @@ const handleDropCourse = (
       slots: q.slots.map(s => ({ ...s }))
     }));
 
-    // If dropping from planner
+    const targetSlot = newPlanner[targetQ].slots[targetS];
+    let replacedCourse = targetSlot.course ?? null; // track what gets displaced
+
+    // Moving from planner → planner
     if (qIdx !== undefined && sIdx !== undefined) {
       const sourceSlot = newPlanner[qIdx].slots[sIdx];
-      const targetSlot = newPlanner[targetQ].slots[targetS];
 
       // Swap case
       if (targetSlot.course) {
         newPlanner[qIdx].slots[sIdx] = { ...targetSlot };
         newPlanner[targetQ].slots[targetS] = { ...sourceSlot };
+        replacedCourse = null; // swap handled internally, no avail update needed
       } else {
         // Normal move
         newPlanner[qIdx].slots[sIdx] = {};
@@ -587,17 +590,34 @@ const handleDropCourse = (
         };
       }
     } else {
-      // Dragged from availabilities (not planner)
+      // From availabilities
       newPlanner[targetQ].slots[targetS] = {
         course,
         groupKey: "group_id" in course ? getGroupKey(course) : undefined,
       };
     }
 
+    // Handle re-enabling the replaced course (only if not a swap)
+    if (replacedCourse) {
+      if ("course_id" in replacedCourse) {
+        setUsedStandalone(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(replacedCourse.course_id);
+          return newSet;
+        });
+      } else if ("group_id" in replacedCourse) {
+        setUsedGroup(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(getGroupKey(replacedCourse));
+          return newSet;
+        });
+      }
+    }
+
     return newPlanner;
   });
 
-  // Update used sets for availabilities
+  // If dragged *from availabilities*, mark it as used
   if (qIdx === undefined) {
     if ("course_id" in course) {
       setUsedStandalone(prev => new Set(prev).add(course.course_id));
@@ -606,7 +626,6 @@ const handleDropCourse = (
     }
   }
 };
-
 
 const handleRemoveCourse = (qIdx: number, sIdx: number) => {
   const slot = plannerQuarters[qIdx].slots[sIdx];
