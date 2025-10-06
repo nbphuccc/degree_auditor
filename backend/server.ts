@@ -512,6 +512,7 @@ function topologicalSort(
   return { sorted, hasCycle: sorted.length !== nodes.size };
 }
 
+/*
 function computeMissingPrereqs(
   course_id: string,
   prereqMap: Map<string, string[]>,
@@ -528,7 +529,7 @@ function computeMissingPrereqs(
   visited.add(course_id);
 
   const prereqs = prereqMap.get(course_id) ?? [];
-  console.log(`➡️  ${course_id} prereqs:`, prereqs);
+  console.log(`${course_id} prereqs:`, prereqs);
 
   for (const p of prereqs) {
     if (!scheduledSet.has(p)) {
@@ -554,9 +555,10 @@ function computeMissingPrereqs(
     return true;
   });
 
-  console.log(`   ↩️ Returning from ${course_id}:`, unique.map(x => x.course_id));
+  console.log(`Returning from ${course_id}:`, unique.map(x => x.course_id));
   return unique;
 }
+  */
 
 
 // ==========================
@@ -705,27 +707,51 @@ app.post("/api/verify-planner", async (req, res) => {
           const missingMembersInRemaining = missingNotScheduled.filter(m => remainingSet.has(m));
           const missingMembersNotInRemaining = missingNotScheduled.filter(m => !remainingSet.has(m));
 
-          // Violation → only for remaining courses (include full objects where available)
-          if (missingMembersInRemaining.length) {
-            violations.push({
-              course: schedItem.course,
-              message: `Require ${grp.min_courses} out from these courses: ${grp.members
-                .map((id) => availMap.get(id)?.code ?? courseMetaMap.get(id) ?? id)
-                .join(", ")}`,
-              missingPrereqs: missingMembersInRemaining
-                .map(id => availMap.get(id) ?? makeRemainingStandalone(id, courseMetaMap.get(id) ?? id)),
-            });
-          }
+          const totalPrereqs = grp.members.length;
+          const missingInRemainingCodes = missingMembersInRemaining
+            .map(id => availMap.get(id)?.code ?? courseMetaMap.get(id) ?? id);
 
-          // Advisory → for missing prereqs NOT in remainingStandaloneCourses
-          if (missingMembersNotInRemaining.length) {
-            const missingCodes = missingMembersNotInRemaining
-              .map(id => availMap.get(id)?.code ?? courseMetaMap.get(id) ?? id)
-              .join(", ");
-            advisory.push({
-              course: schedItem.course,
-              message: `Make sure you have taken ${missingCodes} for ${schedItem.course.code}`,
-            });
+          const allPrereqsCodes = grp.members
+            .map(id => availMap.get(id)?.code ?? courseMetaMap.get(id) ?? id);
+
+          // ------------------------
+          // Violations & Advisories
+          // ------------------------
+          if (grp.min_courses === totalPrereqs) {
+            // All prerequisites are required
+            if (missingMembersInRemaining.length) {
+              violations.push({
+                course: schedItem.course,
+                message: `${schedItem.course.code} requires ${allPrereqsCodes.join(", ")}. Currently missing: ${missingInRemainingCodes.join(", ")}`,
+                missingPrereqs: missingMembersInRemaining
+                  .map(id => availMap.get(id) ?? makeRemainingStandalone(id, courseMetaMap.get(id) ?? id)),
+              });
+            }
+            // If some prereqs are not in remaining, add advisory for them
+            if (missingMembersNotInRemaining.length) {
+              advisory.push(
+                ...missingMembersNotInRemaining.map(id => ({
+                  course: schedItem.course,
+                  message: `Make sure you have taken ${availMap.get(id)?.code ?? courseMetaMap.get(id) ?? id} for ${schedItem.course.code}`,
+                }))
+              );
+            }
+          } else {
+            // min_courses < total prereqs → advisory about how many are required
+            if (missingMembersInRemaining.length) {
+              advisory.push({
+                course: schedItem.course,
+                message: `${schedItem.course.code} requires ${grp.min_courses} out of ${allPrereqsCodes.join(", ")}. Missing: ${missingInRemainingCodes.join(", ")}`,
+              });
+            }
+            if (missingMembersNotInRemaining.length) {
+              advisory.push(
+                ...missingMembersNotInRemaining.map(id => ({
+                  course: schedItem.course,
+                  message: `Make sure you have taken ${availMap.get(id)?.code ?? courseMetaMap.get(id) ?? id} for ${schedItem.course.code}`,
+                }))
+              );
+            }
           }
         }
 
@@ -737,6 +763,7 @@ app.post("/api/verify-planner", async (req, res) => {
         }
       }
 
+      /*
       // Find all possible missing prereqs (chain) within the remaining standalone courses
       // Does not find prereqs outside remaining standalone courses.
       // When there is only 1 missing prereq, will coincide with the previous method.
@@ -760,9 +787,8 @@ app.post("/api/verify-planner", async (req, res) => {
           message: `Make sure you have taken ${missingCodes} for ${schedItem.course.code}`,
         });
       }
+      */
       
-
-
       const availTokens = splitAvailability(availMap.get(cId)?.availability ?? "");
       if (availTokens.length && !availTokens.includes(termName.toLowerCase())) {
         advisory.push({

@@ -30,7 +30,7 @@ export type Violation = {
 export type Advisory = {
   course?: RemainingStandaloneRequirement;
   message: string;
-    missingPrereqs?: RemainingStandaloneRequirement[];
+  missingPrereqs?: RemainingStandaloneRequirement[];
 };
 
 export type VerifyPlannerResponse = {
