@@ -584,6 +584,20 @@ app.post("/api/verify-planner", async (req, res) => {
     const scheduledSet = new Set<string>((schedule || []).map((s: PlannerScheduleItem) => s.course.course_id));
     const scheduledMap = new Map<string, PlannerScheduleItem>((schedule || []).map((s: PlannerScheduleItem) => [s.course.course_id, s]));
 
+    const courseMap = new Map<string, RemainingStandaloneRequirement>();
+
+    // Add all remainingStandaloneCourses (already in availMap)
+    for (const [id, course] of availMap) {
+      courseMap.set(id, course);
+    }
+
+    // Add any scheduled courses not in availMap
+    for (const [id, schedItem] of scheduledMap) {
+      if (!courseMap.has(id)) {
+        courseMap.set(id, schedItem.course as RemainingStandaloneRequirement);
+      }
+    }
+
     const allScheduledIds = Array.from(scheduledSet);
 
     const db = await openDb();
@@ -652,10 +666,12 @@ app.post("/api/verify-planner", async (req, res) => {
     // ------------------------
     const { sorted: topoSortedIds, hasCycle } = topologicalSort(nodesSet, edges);
 
+    // Now map topoSortedIds safely
     const suggestedOrder: RemainingStandaloneRequirement[] = topoSortedIds
-  .filter(id => remainingSet.has(id))  // exclude courses not part of remaining requirements
-  .map((id) => availMap.get(id)!);
-
+  .map(id => courseMap.get(id))
+  .filter((course) =>
+    scheduledSet.has(course!.course_id) || remainingSet.has(course!.course_id) // Look for courses that are in the schedule OR remainingStandaloneCourses. Prereqs not in remainingStandaloneCourses will be filtered out
+  ) as RemainingStandaloneRequirement[];
 
     // ------------------------
     // violations & advisory
@@ -763,7 +779,7 @@ app.post("/api/verify-planner", async (req, res) => {
               advisory.push(
                 ...missingMembersNotInRemaining.map(id => ({
                   course: schedItem.course,
-                  message: `Make sure you have taken ${availMap.get(id)?.code ?? courseMetaMap.get(id) ?? id} for ${schedItem.course.code}`,
+                  message: `Make sure you have taken ${availMap.get(id)?.code ?? courseMetaMap.get(id) ?? id} for ${schedItem.course.code}`, //availMap should be redundant here
                 }))
               );
             }
@@ -804,7 +820,7 @@ app.post("/api/verify-planner", async (req, res) => {
       }
       */
       
-      const availTokens = splitAvailability(availMap.get(cId)?.availability ?? "");
+      const availTokens = splitAvailability(courseMap.get(cId)?.availability ?? "");
       if (availTokens.length && !availTokens.includes(termName.toLowerCase())) {
         advisory.push({
           course: schedItem.course,

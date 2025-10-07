@@ -27,7 +27,8 @@ export default function App() {
   const [clickedGroupLabel, setClickedGroupLabel] = useState<string>(""); // optional, show "Group XYZ — Fall"
 
   const [selectedQuarter, setSelectedQuarter] = useState<string | null>(null); // initially null
-  const [plannerYear, setPlannerYear] = useState<string | null>(null);
+  const [plannerYear, setPlannerYear] = useState<number | null>(null);
+  const [plannerYearError, setPlannerYearError] = useState<string | null>(null);
   const [summerSkip, setSummerSkip] = useState<boolean>(false);
   const [plannerQuarters, setPlannerQuarters] = useState<Quarter[]>([]);
   const [usedStandalone, setUsedStandalone] = useState<Set<string>>(new Set()); // set of course_ids
@@ -43,7 +44,7 @@ export default function App() {
   // Order of quarters
   const quarterOrder = ["Fall", "Winter", "Spring", "Summer"] as const;
 
-  const BASE_URL = import.meta.env.VITE_BACKEND_URL;
+  const BASE_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:4000";
 
   /**
  * Returns true if any planner slot is a group (groupKey present) but has no chosenCourse.
@@ -441,6 +442,17 @@ const handleVerifier = async () => {
       setRemainingStandaloneAvailabilities([]);
       setRemainingGrouAvailabilities([]);
       setClickedGroupCourses([]);
+      setSelectedQuarter(null);
+      setPlannerYear(null);
+      setPlannerYearError(null);
+      setSummerSkip(false);
+      setPlannerQuarters([]);
+      setUsedStandalone(new Set());
+      setUsedGroup(new Set());
+      setPlannerGroupErrors(new Map());
+      setVerifyResult(null);
+      setVerifyLoading(false);
+      setVerifyError(null);
     }
 
     setLocked((prev) => !prev);
@@ -500,7 +512,7 @@ const handleVerifier = async () => {
   }
 
   if (nextQuarterName === "Summer" && summerSkip) {
-    // 1️⃣ Add Summer placeholder
+    // Add Summer placeholder
     newQuarters.push({
       name: "Summer",
       year: nextYear.toString(),
@@ -508,7 +520,7 @@ const handleVerifier = async () => {
       isPlaceholder: true,
     });
 
-    // 2️⃣ Immediately add Fall after Summer placeholder
+    // Immediately add Fall after Summer placeholder
     const fallYear = nextYear; // Fall is same year after Summer
     newQuarters.push({
       name: "Fall",
@@ -754,8 +766,8 @@ const handlePlannerGroupInputBlur = async (
             // Type guard for sanity
             if (slot && "group_id" in group) {
               slot.chosenCourse = enrichedCourse;
+              //console.log(slot.chosenCourse.availability);
             }
-            console.log(enrichedCourse.availability);
             return newPlanner;
           });
         } catch (err) {
@@ -780,13 +792,44 @@ const handlePlannerGroupInputBlur = async (
   }
 };
 
+const handlePlannerYearBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+  const value = e.target.value.trim();
+  const currentYear = new Date().getFullYear();
+
+  // Empty input → reset state and clear error
+  if (!value) {
+    setPlannerYear(null);
+    setPlannerYearError(null);
+    return;
+  }
+
+  const parsed = Number(value);
+
+  // Validation checks
+  if (isNaN(parsed)) {
+    setPlannerYearError("Year must be a number");
+    return;
+  }
+  if (parsed < currentYear){
+    setPlannerYearError("Cannot enter earlier years");
+    return;
+  }
+  if (value.length > 4) {
+    setPlannerYearError("Invalid year");
+    return;
+  }
+  // Valid year
+  setPlannerYear(parsed);
+  setPlannerYearError(null);
+};
+
   // === JSX ===
   return (
     <div className="page-container">
       <div className="page">
         <div className="column">
           <div className="box">
-            <div>{warmingUp && <p>⏳ Waking up backend… this may take a few seconds</p>}</div>
+            <div>{warmingUp && <p>⏳ Waking up backend… this may take a minute</p>}</div>
             <h2>PATHWAY SELECTOR</h2>
 
             {/* College Dropdown */}
@@ -1041,15 +1084,19 @@ const handlePlannerGroupInputBlur = async (
     {/* Year Input */}
     <div className="dropdown">
       <label>
-        Year:
-        <input
-          type="text"
-          className="small-textbox"
-          value={plannerYear ?? ""}
-          onChange={e => setPlannerYear(e.target.value || null)}
-          placeholder={`e.g. ${new Date().getFullYear()}`}
-        />
-      </label>
+  Year:
+  <input
+    type="text"
+    className={`small-textbox ${plannerYearError ? "error" : ""}`}
+    defaultValue={plannerYear ?? ""}
+    onBlur={handlePlannerYearBlur}
+    placeholder={`e.g. ${new Date().getFullYear()}`}
+  />
+</label>
+{plannerYearError && (
+  <div className="error-text">{plannerYearError}</div>
+)}
+
     </div>
 
     {/* Skip Summer */}

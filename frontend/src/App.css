@@ -371,7 +371,7 @@ html, body, #root {
 /* Planner + Quarters side-by-side container */
 .planner-layout {
   display: flex;
-  gap: 30px;              /* space between left and right panels */
+  gap: 20px;              /* space between left and right panels */
   align-items: flex-start; /* top alignment */
   width: 100%;
 }
@@ -411,10 +411,11 @@ html, body, #root {
 
 /* Right panel: Quarters container */
 .quarters-panel {
-  flex: 0 0 760px;           /* fixed width for cards */
+  flex: 0 0 800px;           /* fixed width for cards */
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 5px;
+  margin-top: 10px;
 }
 
 /* Optional responsive: stack vertically on small screens */
@@ -543,4 +544,14 @@ html, body, #root {
   color: #b45309;
 }
 
-
+.group-course-textbox {
+  width: 100px;              /* small width to fit short course codes like "CSE 142" */
+  padding: 3px 6px;
+  font-size: 0.9rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  box-sizing: border-box;
+  text-align: center;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
