@@ -9,7 +9,7 @@ import type {RemainingStandaloneRequirement, PlannerScheduleItem, PrerequisiteGr
 const app = express();
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:5173", // dev fallback
+    origin: process.env.FRONTEND_URL || "http://localhost:5173",
   })
 );
 app.use(express.json());
@@ -17,7 +17,7 @@ app.use(express.json());
 // Open SQLite database
 async function openDb() {
   return open({
-    filename: "./pathways.db", // your .db file in same folder
+    filename: "./pathways.db",
     driver: sqlite3.Database,
   });
 }
@@ -267,9 +267,6 @@ app.get("/api/groups/:groupId/validate-v2", async (req, res) => {
 // Get availabilities for selected standalone courses + group requirements
 app.post("/api/requirements-availability", async (req, res) => {
   const { collegeId, standaloneCourseIds, groupIds } = req.body;
-  //console.log(collegeId);
-  //console.log(standaloneCourseIds);
-  //console.log(groupIds);
 
   if (!collegeId || !Array.isArray(standaloneCourseIds) || !Array.isArray(groupIds)) {
     return res.status(400).json({ error: "collegeId, standaloneCourseIds, and groupIds are required" });
@@ -449,7 +446,7 @@ app.post("/api/group-term-courses", async (req, res) => {
     }
 
     // Filter by availability term
-    const termColumn = term; // assume term matches the column name: Fall/Winter/Spring/Summer
+    const termColumn = term;
     const coursesWithTerm = await db.all(
       `
       SELECT ca.course_id, c.code
@@ -512,6 +509,7 @@ function topologicalSort(
   return { sorted, hasCycle: sorted.length !== nodes.size };
 }
 
+// Used to find the entire chain of prereqs
 /*
 function computeMissingPrereqs(
   course_id: string,
@@ -794,6 +792,7 @@ app.post("/api/verify-planner", async (req, res) => {
         }
       }
 
+      // Remove since this is needlessly complicated 
       /*
       // Find all possible missing prereqs (chain) within the remaining standalone courses
       // Does not find prereqs outside remaining standalone courses.
@@ -860,7 +859,7 @@ app.post("/api/verify-planner", async (req, res) => {
 // -----------------------
 // Start server
 // -----------------------
-const PORT = process.env.PORT || 4000; // Use the environment variable if available
+const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });

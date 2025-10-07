@@ -24,7 +24,7 @@ export default function App() {
   const [remainingStandaloneAvailabilities, setRemainingStandaloneAvailabilities] = useState<RemainingStandaloneRequirement[]>([]);
 
   const [clickedGroupCourses, setClickedGroupCourses] = useState<{ course_id: string; code: string }[]>([]);
-  const [clickedGroupLabel, setClickedGroupLabel] = useState<string>(""); // optional, show "Group XYZ — Fall"
+  const [clickedGroupLabel, setClickedGroupLabel] = useState<string>(""); // show "Group XYZ — Fall"
 
   const [selectedQuarter, setSelectedQuarter] = useState<string | null>(null); // initially null
   const [plannerYear, setPlannerYear] = useState<number | null>(null);
@@ -57,7 +57,7 @@ const canVerify = useMemo(() => {
       }
     }
   }
-  return plannerQuarters.length > 0; // optional: require at least one quarter
+  return plannerQuarters.length > 0; // require at least one quarter
 }, [plannerQuarters]);
 
 function buildScheduleFromPlannerQuarters() {
@@ -103,7 +103,7 @@ const handleVerifier = async () => {
 
     const payload = {
       schedule, // [{courses, termIndex}, ...]
-      remainingStandaloneCourses: remainingStandaloneAvailabilities, // for backend to determine advisory vs violation per your rule
+      remainingStandaloneCourses: remainingStandaloneAvailabilities, // for backend to determine advisory vs violation
     };
     const res = await fetch(`${BASE_URL}/api/verify-planner`, {
       method: "POST",
